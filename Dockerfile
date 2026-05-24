@@ -9,7 +9,7 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock README.md ./
 COPY LICENSE ./
-COPY template_doc ./template_doc
+COPY realtimedatastreaming ./realtimedatastreaming
 
 RUN uv sync --frozen --no-dev --no-editable
 
@@ -35,4 +35,4 @@ COPY --from=builder --chown=app:app /app/.venv /app/.venv
 
 USER app
 
-ENTRYPOINT ["template-doc"]
+ENTRYPOINT ["realtimedatastreaming"]

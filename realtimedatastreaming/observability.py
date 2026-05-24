@@ -7,11 +7,11 @@ from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
 
-from template_doc.settings import LOG_LEVELS, Settings
+from realtimedatastreaming.settings import LOG_LEVELS, Settings
 
 request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
 trace_id: ContextVar[str | None] = ContextVar("trace_id", default=None)
-_MANAGED_HANDLER_ATTR = "_template_doc_managed_handler"
+_MANAGED_HANDLER_ATTR = "_realtimedatastreaming_managed_handler"
 
 
 class JsonFormatter(logging.Formatter):

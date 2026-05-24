@@ -1,8 +1,8 @@
 import logging
 import uuid
 
-from template_doc.observability import configure_observability, set_correlation_context
-from template_doc.settings import get_settings
+from realtimedatastreaming.observability import configure_observability, set_correlation_context
+from realtimedatastreaming.settings import get_settings
 
 logger = logging.getLogger(__name__)
 

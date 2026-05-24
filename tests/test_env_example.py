@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from template_doc.settings import Settings
+from realtimedatastreaming.settings import Settings
 
 
 def test_env_example_matches_settings_aliases() -> None:

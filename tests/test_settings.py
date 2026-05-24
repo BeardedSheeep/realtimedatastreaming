@@ -3,22 +3,22 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from template_doc.settings import Settings, get_settings
+from realtimedatastreaming.settings import Settings, get_settings
 
 
 def test_settings_defaults() -> None:
     settings = Settings()
 
-    assert settings.app_name == "template-doc"
+    assert settings.app_name == "realtimedatastreaming"
     assert settings.environment == "development"
     assert settings.debug is False
     assert settings.log_level == "INFO"
     assert settings.log_format == "json"
-    assert settings.service_name == "template-doc"
+    assert settings.service_name == "realtimedatastreaming"
     assert settings.service_version == "0.1.0"
     assert settings.otel_enabled is False
     assert settings.otel_exporter_otlp_endpoint is None
-    assert settings.otel_service_name == "template-doc"
+    assert settings.otel_service_name == "realtimedatastreaming"
     assert settings.sentry_dsn is None
     assert settings.sentry_environment == "development"
     assert settings.sentry_traces_sample_rate == 0.0

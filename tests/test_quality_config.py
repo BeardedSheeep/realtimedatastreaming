@@ -7,7 +7,7 @@ def test_coverage_threshold_is_enforced_in_pyproject() -> None:
 
     assert pyproject["tool"]["coverage"]["report"]["fail_under"] == 80
     assert pyproject["tool"]["coverage"]["run"]["branch"] is True
-    assert pyproject["tool"]["coverage"]["run"]["source"] == ["template_doc"]
+    assert pyproject["tool"]["coverage"]["run"]["source"] == ["realtimedatastreaming"]
 
 
 def test_nox_test_session_runs_pytest_with_coverage() -> None:

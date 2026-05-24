@@ -3,8 +3,8 @@ from typing import Any
 
 import pytest
 
-from template_doc.cli import main
-from template_doc.settings import get_settings
+from realtimedatastreaming.cli import main
+from realtimedatastreaming.settings import get_settings
 
 
 def test_cli_emits_user_output_and_structured_logs(capsys: Any, monkeypatch: Any) -> None:
@@ -16,7 +16,7 @@ def test_cli_emits_user_output_and_structured_logs(capsys: Any, monkeypatch: Any
     captured = capsys.readouterr()
     logs = [json.loads(line) for line in captured.err.splitlines()]
 
-    assert captured.out == "template-doc [development]\n"
+    assert captured.out == "realtimedatastreaming [development]\n"
     assert [log["message"] for log in logs] == ["application_started", "application_finished"]
     assert logs[0]["request_id"] == logs[1]["request_id"]
     assert logs[0]["trace_id"] is None
@@ -29,7 +29,7 @@ def test_cli_logs_failure_before_reraising(capsys: Any, monkeypatch: Any) -> Non
         raise RuntimeError("print failed")
 
     monkeypatch.setenv("LOG_FORMAT", "json")
-    monkeypatch.setattr("template_doc.cli._print_user_output", broken_print)
+    monkeypatch.setattr("realtimedatastreaming.cli._print_user_output", broken_print)
     get_settings.cache_clear()
 
     with pytest.raises(RuntimeError, match="print failed"):

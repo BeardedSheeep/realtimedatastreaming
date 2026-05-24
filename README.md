@@ -1,35 +1,37 @@
-# Template Doc
+# Realtime Data Streaming
 
-Python project template with:
+Python project scaffold for the `realtimedatastreaming` repository.
 
-- a small importable package;
-- a console entrypoint;
+The repository is initialized with:
+
+- an importable `realtimedatastreaming` package;
+- a `realtimedatastreaming` console entrypoint;
 - typed and validated environment settings;
 - structured JSON/text logging helpers;
 - lightweight correlation context for request and trace IDs;
 - `uv` dependency management;
 - `nox` developer commands;
 - Ruff, mypy, pytest, coverage, and pip-audit wiring;
-- Docker and GitHub Actions scaffolding with security scan examples.
+- Docker and GitHub Actions quality/security workflows.
 
-This repository is meant to be copied, renamed, and adapted. It is not a finished application.
+This is the local foundation that will receive the real-time data engineering code later.
 
 ## Layout
 
 ```text
-template_doc/                  Python package placeholder
-markdown/                      Supporting template notes
-scripts/                       Repository maintenance scripts
-.github/workflows/             CI and CI/CD examples
-Dockerfile                     Container build scaffold
-noxfile.py                     Local task runner
-pyproject.toml                 Package and tool configuration
-uv.lock                        Locked dependency graph
+realtimedatastreaming/        Python package
+markdown/                     Supporting project notes
+scripts/                      Repository maintenance scripts
+.github/workflows/            CI and CI/CD workflows
+Dockerfile                    Container build scaffold
+noxfile.py                    Local task runner
+pyproject.toml                Package and tool configuration
+uv.lock                       Locked dependency graph
 ```
 
 ## Setup
 
-This template targets Python 3.12.
+This project targets Python 3.12.
 
 ```bash
 uv sync --all-groups
@@ -57,39 +59,37 @@ uv run nox -s test
 uv run nox -s audit
 ```
 
-The test suite covers package importability, the console script, environment settings, observability formatting, packaging smoke checks, and quality-tool configuration.
-
 ## CLI
 
 ```bash
-template-doc
+realtimedatastreaming
 ```
 
 Default output:
 
 ```text
-template-doc [development]
+realtimedatastreaming [development]
 ```
 
-The CLI is only a packaging and configuration smoke test.
+The current CLI is a packaging and configuration smoke test. It should be replaced by the real application entrypoint when the data streaming code is integrated.
 
 ## Configuration
 
 Environment variables:
 
 ```env
-APP_NAME=template-doc
+APP_NAME=realtimedatastreaming
 APP_ENV=development
 APP_DEBUG=false
 
 LOG_LEVEL=INFO
 LOG_FORMAT=json
-SERVICE_NAME=template-doc
+SERVICE_NAME=realtimedatastreaming
 SERVICE_VERSION=0.1.0
 
 OTEL_ENABLED=false
 OTEL_EXPORTER_OTLP_ENDPOINT=
-OTEL_SERVICE_NAME=template-doc
+OTEL_SERVICE_NAME=realtimedatastreaming
 
 SENTRY_DSN=
 SENTRY_ENVIRONMENT=development
@@ -106,19 +106,18 @@ Validation rules:
 
 ## Observability
 
-The template includes a lightweight observability baseline for Python CLI, worker, or service projects:
+The project includes a lightweight observability baseline for Python CLI, worker, or service code:
 
-- configure application logs through `template_doc.observability.configure_observability`;
-- call observability configuration from the process entrypoint; it is idempotent and preserves externally registered logging handlers;
+- configure application logs through `realtimedatastreaming.observability.configure_observability`;
+- call observability configuration from process entrypoints;
 - use `logging` for application logs and keep `print` for intentional user-facing output only;
 - prefer `LOG_FORMAT=json` outside local debugging;
 - include stable context fields such as service, environment, version, request ID, and trace ID;
 - never log secrets, credentials, tokens, or raw sensitive user data;
-- add a request ID middleware when turning the template into a web service;
-- let OpenTelemetry populate trace IDs when tracing is enabled in a real runtime;
+- add request ID middleware when turning the project into a web service;
 - add metrics, healthchecks, and distributed tracing when the project becomes a web service or long-running worker.
 
-OpenTelemetry and Sentry settings are present as placeholders for future service projects. The template does not initialize those SDKs by default.
+OpenTelemetry and Sentry settings are present as placeholders for future service runtime integration. The SDKs are not initialized by default.
 
 ## Docker
 
@@ -140,7 +139,7 @@ Run the full local image quality gate:
 uv run nox -s image_quality
 ```
 
-Before using Docker for a real project, review the base image, entrypoint, runtime packages, ports, user, registry, tags, and publication rules.
+Before publishing an image, review the base image, entrypoint, runtime packages, ports, user, registry, tags, and publication rules.
 
 ## CI/CD
 
@@ -148,40 +147,16 @@ Workflows:
 
 - `.github/workflows/quality.yaml`: runs audit, format, lint, typing, and tests;
 - `.github/workflows/ci.yaml`: runs quality checks on pushes and pull requests;
-- `.github/workflows/cicd.yaml`: builds the image, runs security scans, and publishes to GHCR after blocking checks pass.
+- `.github/workflows/cicd.yaml`: builds the image, runs security scans, and prepares GHCR publishing behavior.
 
 Quality checks run on Python 3.12, matching the package metadata and Nox sessions.
 
-Before enabling CI/CD for a real project, review branch rules, workflow permissions, registry naming, image promotion, secrets, environments, and release policy.
+## Integration Notes
 
-## Renaming Checklist
+When integrating the external real-time data engineering code, keep the initialized project boundaries clean:
 
-Replace the placeholders before using this as a real project:
-
-- `template_doc/` package directory;
-- `template_doc` imports;
-- `template-doc` package name;
-- `template-doc` CLI command;
-- `PROJECT_PACKAGE` in `noxfile.py`;
-- Hatch package and source distribution settings in `pyproject.toml`;
-- Docker `COPY` path and `ENTRYPOINT`;
-- `APP_NAME` in `.env.example`;
-- project URLs containing `CHANGE_ME`;
-- README and documentation text that still describes the template.
-
-Search for leftovers:
-
-```bash
-rg "template_doc|template-doc|CHANGE_ME"
-```
-
-## Before Real Use
-
-At minimum:
-
-1. Rename the package and command.
-2. Update `pyproject.toml` metadata.
-3. Replace the example CLI with the real entrypoint.
-4. Add tests for real behavior.
-5. Review Docker and CI/CD before publishing anything.
-6. Rewrite this README for the actual project.
+1. Put reusable Python code under `realtimedatastreaming/`.
+2. Keep generated artifacts, virtual environments, caches, and local IDE files out of git.
+3. Add tests around real behavior as each pipeline component is imported.
+4. Pin runtime dependencies intentionally in `pyproject.toml` and refresh `uv.lock`.
+5. Review Docker and CI/CD before enabling image publication.

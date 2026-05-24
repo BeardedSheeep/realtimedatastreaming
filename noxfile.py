@@ -7,7 +7,7 @@ from nox.sessions import Session
 
 PROJECT_DIR = Path(__file__).parent
 PROJECT_NAME = os.getenv("PROJECT_NAME", PROJECT_DIR.name)
-PROJECT_PACKAGE = "template_doc"
+PROJECT_PACKAGE = "realtimedatastreaming"
 PYTHON_VERSION = "3.12"
 SOURCE_PATHS = [path for path in (PROJECT_PACKAGE, "tests") if (PROJECT_DIR / path).exists()] or ["."]
 
