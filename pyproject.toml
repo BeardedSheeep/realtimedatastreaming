@@ -24,8 +24,13 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    "cassandra-driver>=3.29.0,<4.0.0",
+    "confluent-kafka>=2.8.0,<3.0.0",
+    "httpx>=0.28.0,<1.0.0",
     "pydantic>=2.0.0,<3.0.0",
     "pydantic-settings>=2.0.0,<3.0.0",
+    "pyspark>=3.5.0,<4.0.0",
+    "ruff>=0.15.12",
 ]
 
 [project.urls]
