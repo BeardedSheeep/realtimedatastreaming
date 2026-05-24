@@ -1,19 +1,18 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+## [0.1.0] - 2026-05-24
 
-The format is based on Keep a Changelog, and this project follows semantic versioning.
+### Added
 
-## [Unreleased]
+- Initialized the `realtimedatastreaming` Python project with package metadata, CLI entrypoint, `uv` dependency management, and Docker support.
+- Added typed settings for application, logging, observability, Random User ingestion, Kafka, Spark, Cassandra, Sentry, and OpenTelemetry.
+- Added structured logging with JSON/text formats and correlation context.
+- Added the Random User ingestion module with typed normalized profiles, payload validation, timeout, retries, backoff, rate limiting, and classified errors.
+- Added automated tests for settings, observability, packaging, quality configuration, and ingestion behavior.
+- Added developer tooling with Nox, Ruff, mypy, pytest, coverage, pip-audit, and pre-commit.
+- Added GitHub Actions workflows for quality checks, CI, CI/CD, Docker smoke tests, and Trivy security scanning.
+- Added project documentation, `.env.example`, and a development roadmap.
 
-### Changed
+### Security
 
-- Initialize the repository as `realtimedatastreaming`.
-- Rename the Python package from `template_doc` to `realtimedatastreaming`.
-- Rename the console script from `template-doc` to `realtimedatastreaming`.
-- Update package metadata, project URLs, Docker build paths, Nox coverage target, environment defaults, and tests for the initialized project name.
-- Refresh `uv.lock` so the lockfile resolves the local package as `realtimedatastreaming`.
-
-### Documentation
-
-- Rewrite the README for the initialized local project and its future real-time data engineering integration path.
+- Added secret scanning, dependency auditing, container/filesystem vulnerability scanning, and expiry checks for temporary Trivy ignore entries.
