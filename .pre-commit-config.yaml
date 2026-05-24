@@ -1,0 +1,16 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+        stages: [pre-commit]
+
+  - repo: local
+    hooks:
+      - id: nox-pre-commit
+        name: Run Nox sessions before commit
+        entry: env PYTHONDONTWRITEBYTECODE=1 uv run --locked nox
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]

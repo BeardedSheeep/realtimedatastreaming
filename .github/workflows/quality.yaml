@@ -1,0 +1,117 @@
+name: Quality
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install dependencies
+        run: uv sync --all-groups --locked
+
+      - name: Run dependency audit
+        run: uv run nox -s audit
+
+  format:
+    name: Format
+    runs-on: ubuntu-24.04
+    needs: audit
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install dependencies
+        run: uv sync --all-groups --locked
+
+      - name: Run format session
+        run: uv run nox -s format
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    needs: audit
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install dependencies
+        run: uv sync --all-groups --locked
+
+      - name: Run lint session
+        run: uv run nox -s lint
+
+  typing:
+    name: Typing
+    runs-on: ubuntu-24.04
+    needs: audit
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install dependencies
+        run: uv sync --all-groups --locked
+
+      - name: Run typing session
+        run: uv run nox -s typing
+
+  test:
+    name: Test
+    runs-on: ubuntu-24.04
+    needs: audit
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install dependencies
+        run: uv sync --all-groups --locked
+
+      - name: Run test session
+        run: uv run nox -s test

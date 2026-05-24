@@ -1,0 +1,362 @@
+name: CICD
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality
+    uses: ./.github/workflows/quality.yaml
+
+  trivyignore_expiry:
+    name: Security/Trivy exception expiry
+    runs-on: ubuntu-24.04
+    needs: quality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Check Trivy ignore expiry
+        run: bash scripts/check-trivyignore-expiry.sh .trivyignore.yaml
+
+  build_image:
+    name: Build and smoke image
+    runs-on: ubuntu-24.04
+    needs: [quality, trivyignore_expiry]
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+      tag: ${{ steps.image.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set image metadata
+        id: image
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          tag="${GITHUB_SHA}"
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install dependencies
+        run: uv sync --all-groups --locked
+
+      - name: Build image
+        env:
+          DOCKER_IMAGE: ${{ steps.image.outputs.image }}
+          DOCKER_TAG: ${{ steps.image.outputs.tag }}
+        run: uv run nox -s docker_build
+
+      - name: Smoke test image
+        env:
+          DOCKER_IMAGE: ${{ steps.image.outputs.image }}
+          DOCKER_TAG: ${{ steps.image.outputs.tag }}
+        run: uv run nox -s docker_smoke
+
+      - name: Save image artifact
+        run: docker save "${{ steps.image.outputs.image }}:${{ steps.image.outputs.tag }}" -o image.tar
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: built-image
+          path: image.tar
+          if-no-files-found: error
+
+  trivy_image:
+    name: Security/Trivy image
+    runs-on: ubuntu-24.04
+    needs: build_image
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download image artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: built-image
+
+      - name: Load image
+        run: docker load -i image.tar
+
+      - name: Generate Trivy image SARIF
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "${PWD}:/workspace" \
+            aquasec/trivy:0.70.0 image \
+            --scanners vuln \
+            --ignorefile /workspace/.trivyignore.yaml \
+            --severity HIGH,CRITICAL \
+            --exit-code 0 \
+            --format sarif \
+            --output /workspace/trivy-image.sarif \
+            "${{ needs.build_image.outputs.image }}:${{ needs.build_image.outputs.tag }}"
+
+      - name: Scan image with Trivy
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "${PWD}:/workspace" \
+            aquasec/trivy:0.70.0 image \
+            --scanners vuln \
+            --ignorefile /workspace/.trivyignore.yaml \
+            --severity HIGH,CRITICAL \
+            --exit-code 0 \
+            --format json \
+            --output /workspace/trivy-image.json \
+            "${{ needs.build_image.outputs.image }}:${{ needs.build_image.outputs.tag }}"
+
+          findings="$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-image.json)"
+
+          {
+            echo "## Trivy image packages to update"
+            echo
+            echo "Image: \`${{ needs.build_image.outputs.image }}:${{ needs.build_image.outputs.tag }}\`"
+            echo
+            echo "| Package | Installed | Fixed in | Severity | CVE |"
+            echo "|---|---:|---:|---|---|"
+            jq -r '
+              def clean: tostring | gsub("\\|"; "\\|");
+              [
+                .Results[]?.Vulnerabilities[]?
+                | {
+                    package: (.PkgName // "unknown"),
+                    installed: (.InstalledVersion // "unknown"),
+                    fixed: (.FixedVersion // "not published"),
+                    severity: (.Severity // "unknown"),
+                    cve: (.VulnerabilityID // "unknown")
+                  }
+              ]
+              | unique_by([.package, .installed, .fixed, .severity, .cve])
+              | sort_by(.package, .severity, .cve)
+              | .[]
+              | "| \(.package | clean) | \(.installed | clean) | \(.fixed | clean) | \(.severity | clean) | \(.cve | clean) |"
+            ' trivy-image.json
+          } > trivy-image-summary.md
+
+          cat trivy-image-summary.md
+          cat trivy-image-summary.md >> "${GITHUB_STEP_SUMMARY}"
+
+          if [ "${findings}" -gt 0 ]; then
+            exit 1
+          fi
+
+      - name: Upload Trivy image SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+  trivy_fs:
+    name: Security/Trivy filesystem
+    runs-on: ubuntu-24.04
+    needs: trivyignore_expiry
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Generate Trivy filesystem SARIF
+        run: |
+          docker run --rm \
+            -v "${PWD}:/workspace" \
+            aquasec/trivy:0.70.0 fs \
+            --scanners vuln,secret,misconfig \
+            --ignorefile /workspace/.trivyignore.yaml \
+            --severity HIGH,CRITICAL \
+            --exit-code 0 \
+            --format sarif \
+            --output /workspace/trivy-fs.sarif \
+            /workspace
+
+      - name: Scan repository CVEs with Trivy
+        run: |
+          set +e
+          docker run --rm \
+            -v "${PWD}:/workspace" \
+            aquasec/trivy:0.70.0 fs \
+            --scanners vuln \
+            --ignorefile /workspace/.trivyignore.yaml \
+            --severity HIGH,CRITICAL \
+            --exit-code 1 \
+            --format table \
+            --output /workspace/trivy-fs.txt \
+            /workspace
+          status=$?
+          cat trivy-fs.txt
+          exit "${status}"
+
+      - name: Scan repository secrets and misconfigurations with Trivy
+        run: |
+          set +e
+          docker run --rm \
+            -v "${PWD}:/workspace" \
+            aquasec/trivy:0.70.0 fs \
+            --scanners secret,misconfig \
+            --ignorefile /workspace/.trivyignore.yaml \
+            --severity HIGH,CRITICAL \
+            --exit-code 1 \
+            --format table \
+            --output /workspace/trivy-fs-config.txt \
+            /workspace
+          status=$?
+          cat trivy-fs-config.txt
+          exit "${status}"
+
+      - name: Upload Trivy filesystem SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+
+  osv_scanner:
+    name: Security/OSV Scanner
+    runs-on: ubuntu-24.04
+    needs: trivyignore_expiry
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Scan dependencies with OSV Scanner
+        run: |
+          docker run --rm \
+            -v "${PWD}:/workspace" \
+            ghcr.io/google/osv-scanner:v2.3.6 \
+            --recursive \
+            --format sarif \
+            --output /workspace/osv-scanner.sarif \
+            /workspace
+
+      - name: Upload OSV Scanner SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: osv-scanner.sarif
+          category: osv-scanner
+
+  gitleaks:
+    name: Security/Gitleaks
+    runs-on: ubuntu-24.04
+    needs: trivyignore_expiry
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Scan Git history with Gitleaks
+        run: |
+          docker run --rm \
+            -v "${PWD}:/workspace" \
+            ghcr.io/gitleaks/gitleaks:v8.30.0 detect \
+            --source /workspace \
+            --report-format sarif \
+            --report-path /workspace/gitleaks.sarif \
+            --redact
+
+      - name: Upload Gitleaks SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: gitleaks.sarif
+          category: gitleaks
+
+  publish_image:
+    name: Publish image
+    runs-on: ubuntu-24.04
+    needs: [build_image, trivy_image, trivy_fs, osv_scanner, gitleaks]
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download image artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: built-image
+
+      - name: Load image
+        run: docker load -i image.tar
+
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Push image
+        run: |
+          docker push "${{ needs.build_image.outputs.image }}:${{ needs.build_image.outputs.tag }}"
+          docker tag "${{ needs.build_image.outputs.image }}:${{ needs.build_image.outputs.tag }}" "${{ needs.build_image.outputs.image }}:latest"
+          docker push "${{ needs.build_image.outputs.image }}:latest"
+
+  security_report:
+    name: Security report
+    runs-on: ubuntu-24.04
+    needs: [trivyignore_expiry, build_image, trivy_image, trivy_fs, osv_scanner, gitleaks, publish_image]
+    if: always()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Generate security summary
+        run: |
+          mkdir -p security-reports
+          cp .trivyignore.yaml security-reports/trivy-exceptions.yaml
+          cat > security-reports/summary.md <<'EOF'
+          # Security Report
+
+          | Check | Result |
+          |---|---|
+          | Trivy exception expiry | ${{ needs.trivyignore_expiry.result }} |
+          | Trivy image scan | ${{ needs.trivy_image.result }} |
+          | Trivy filesystem scan | ${{ needs.trivy_fs.result }} |
+          | OSV Scanner | ${{ needs.osv_scanner.result }} |
+          | Gitleaks history scan | ${{ needs.gitleaks.result }} |
+          | Image publish | ${{ needs.publish_image.result }} |
+
+          Image: `${{ needs.build_image.outputs.image }}:${{ needs.build_image.outputs.tag }}`
+
+          Detailed findings are available in GitHub Security code scanning.
+          Trivy image package updates are printed in the Trivy image job summary.
+          Trivy exceptions are documented in `trivy-exceptions.yaml`.
+          EOF
+
+      - name: Upload security report bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: security-reports
+          path: security-reports
+          if-no-files-found: error
+
+      - name: Fail on security findings
+        run: |
+          test "${{ needs.trivyignore_expiry.result }}" = "success"
+          test "${{ needs.trivy_image.result }}" = "success"
+          test "${{ needs.trivy_fs.result }}" = "success"
+          test "${{ needs.osv_scanner.result }}" = "success"
+          test "${{ needs.gitleaks.result }}" = "success"

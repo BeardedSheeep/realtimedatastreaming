@@ -1,0 +1,36 @@
+vulnerabilities:
+  - id: CVE-2026-40356
+    purls:
+      - "pkg:deb/debian/libgssapi-krb5-2"
+      - "pkg:deb/debian/libk5crypto3"
+      - "pkg:deb/debian/libkrb5-3"
+      - "pkg:deb/debian/libkrb5support0"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: no Debian Bookworm fixed package is published for affected krb5 packages at the time of triage. Owner: security. Review before expiry; remove as soon as fixed packages or a safer base image are available."
+
+  - id: CVE-2026-41989
+    purls:
+      - "pkg:deb/debian/libgcrypt20"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: no Debian Bookworm fixed package is published for libgcrypt20 at the time of triage. Owner: security. Review before expiry; remove as soon as a fixed package or base image is available."
+
+  - id: CVE-2025-69720
+    purls:
+      - "pkg:deb/debian/libncursesw6"
+      - "pkg:deb/debian/libtinfo6"
+      - "pkg:deb/debian/ncurses-base"
+      - "pkg:deb/debian/ncurses-bin"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: no Debian Bookworm fixed package is published for affected ncurses packages at the time of triage. Owner: security. Review before expiry; remove as soon as fixed packages or a safer base image are available."
+
+  - id: CVE-2025-7458
+    purls:
+      - "pkg:deb/debian/libsqlite3-0"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: no Debian Bookworm fixed package is published for libsqlite3-0 at the time of triage. Owner: security. Review runtime exposure to untrusted SQLite input before renewal."
+
+  - id: CVE-2023-45853
+    purls:
+      - "pkg:deb/debian/zlib1g"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: no Debian Bookworm fixed package is published for zlib1g at the time of triage. Owner: security. Review before expiry; remove as soon as a fixed package or base image is available."
