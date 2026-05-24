@@ -825,7 +825,6 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pyspark" },
-    { name = "ruff" },
 ]
 
 [package.dev-dependencies]
@@ -859,7 +858,6 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0,<3.0.0" },
     { name = "pyspark", specifier = ">=3.5.0,<4.0.0" },
-    { name = "ruff", specifier = ">=0.15.12" },
 ]
 
 [package.metadata.requires-dev]

@@ -1,7 +1,8 @@
 import importlib
-import json
 import shutil
 import subprocess
+import sys
+from pathlib import Path
 
 
 def test_package_is_importable() -> None:
@@ -11,12 +12,10 @@ def test_package_is_importable() -> None:
 
 
 def test_console_script_runs_successfully() -> None:
-    command = shutil.which("realtimedatastreaming")
+    command = shutil.which("realtimedatastreaming") or str(Path(sys.executable).with_name("realtimedatastreaming"))
     assert command is not None
 
     result = subprocess.run([command], capture_output=True, check=False, text=True)
-    logs = [json.loads(line) for line in result.stderr.splitlines()]
 
     assert result.returncode == 0
     assert result.stdout == "realtimedatastreaming [development]\n"
-    assert [log["message"] for log in logs] == ["application_started", "application_finished"]

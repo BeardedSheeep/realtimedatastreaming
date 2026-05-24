@@ -30,7 +30,6 @@ dependencies = [
     "pydantic>=2.0.0,<3.0.0",
     "pydantic-settings>=2.0.0,<3.0.0",
     "pyspark>=3.5.0,<4.0.0",
-    "ruff>=0.15.12",
 ]
 
 [project.urls]
