@@ -182,18 +182,7 @@ uv run realtimedatastreaming
 
 ## Application Configuration
 
-The main variables are documented in `.env.example`:
-
-```env
-APP_NAME=realtimedatastreaming
-APP_ENV=development
-APP_DEBUG=false
-
-LOG_LEVEL=INFO
-LOG_FORMAT=json
-SERVICE_NAME=realtimedatastreaming
-SERVICE_VERSION=0.1.0
-```
+Application variables are documented in [.env.example](.env.example), which is the source of truth for local configuration.
 
 Future Airflow, Kafka, Cassandra, Sentry, and OpenTelemetry secrets must be removed from code and injected through environment variables.
 

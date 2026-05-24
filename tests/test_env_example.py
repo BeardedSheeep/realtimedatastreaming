@@ -9,7 +9,12 @@ def test_env_example_matches_settings_aliases() -> None:
         for line in Path(".env.example").read_text().splitlines()
         if line and not line.startswith("#")
     }
-    settings_aliases = {str(field.alias) for field in Settings.model_fields.values() if field.alias is not None}
+    settings_aliases = {
+        str(field.alias)
+        for settings_group in Settings.settings_groups.values()
+        for field in settings_group.model_fields.values()
+        if field.alias is not None
+    }
 
     assert env_variables == settings_aliases
 
