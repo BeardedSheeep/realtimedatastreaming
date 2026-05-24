@@ -34,3 +34,139 @@ vulnerabilities:
       - "pkg:deb/debian/zlib1g"
     expired_at: 2026-06-20
     statement: "Temporary exception: no Debian Bookworm fixed package is published for zlib1g at the time of triage. Owner: security. Review before expiry; remove as soon as a fixed package or base image is available."
+
+  - id: CVE-2025-52999
+    purls:
+      - "pkg:maven/com.fasterxml.jackson.core/jackson-core"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: detected inside PySpark 4.1.2 hadoop-client-runtime fat JAR. Owner: platform. Review when a newer PySpark/Spark build is published or when the Hadoop runtime can be rebuilt with Jackson >= 2.15.0."
+
+  - id: CVE-2026-2332
+    purls:
+      - "pkg:maven/org.eclipse.jetty/jetty-http"
+      - "pkg:maven/org.eclipse.jetty/jetty-io"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: detected inside PySpark 4.1.2 Spark/Hadoop fat JARs. Owner: platform. Review when a newer PySpark/Spark build is published or when the bundled Spark/Hadoop JARs can be rebuilt with fixed Jetty."
+
+  - id: CVE-2026-43869
+    purls:
+      - "pkg:maven/org.apache.thrift/libthrift"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: Trivy reports no fixed version published. Owner: platform. Review before expiry and remove as soon as an upstream fixed libthrift or Spark distribution is available."
+
+  - id: CVE-2025-54920
+    purls:
+      - "pkg:pypi/pyspark"
+      - "pkg:maven/org.apache.spark/spark-catalyst_2.13"
+      - "pkg:maven/org.apache.spark/spark-common-utils-java_2.13"
+      - "pkg:maven/org.apache.spark/spark-common-utils_2.13"
+      - "pkg:maven/org.apache.spark/spark-connect_2.13"
+      - "pkg:maven/org.apache.spark/spark-core_2.13"
+      - "pkg:maven/org.apache.spark/spark-graphx_2.13"
+      - "pkg:maven/org.apache.spark/spark-hive-thriftserver_2.13"
+      - "pkg:maven/org.apache.spark/spark-hive_2.13"
+      - "pkg:maven/org.apache.spark/spark-kubernetes_2.13"
+      - "pkg:maven/org.apache.spark/spark-kvstore_2.13"
+      - "pkg:maven/org.apache.spark/spark-launcher_2.13"
+      - "pkg:maven/org.apache.spark/spark-mllib-local_2.13"
+      - "pkg:maven/org.apache.spark/spark-mllib_2.13"
+      - "pkg:maven/org.apache.spark/spark-network-common_2.13"
+      - "pkg:maven/org.apache.spark/spark-network-shuffle_2.13"
+      - "pkg:maven/org.apache.spark/spark-pipelines_2.13"
+      - "pkg:maven/org.apache.spark/spark-repl_2.13"
+      - "pkg:maven/org.apache.spark/spark-sketch_2.13"
+      - "pkg:maven/org.apache.spark/spark-sql-api_2.13"
+      - "pkg:maven/org.apache.spark/spark-sql_2.13"
+      - "pkg:maven/org.apache.spark/spark-streaming_2.13"
+      - "pkg:maven/org.apache.spark/spark-tags_2.13"
+      - "pkg:maven/org.apache.spark/spark-unsafe_2.13"
+      - "pkg:maven/org.apache.spark/spark-variant_2.13"
+      - "pkg:maven/org.apache.spark/spark-yarn_2.13"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: detected in PySpark 4.1.2 Spark modules after upgrading to the latest available PySpark release. Owner: platform. Review when a newer PySpark/Spark build with a fix is published."
+
+  - id: CVE-2026-0994
+    purls:
+      - "pkg:maven/com.google.protobuf/protobuf-java"
+      - "pkg:maven/org.apache.hadoop.thirdparty/hadoop-shaded-protobuf_3_25"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: detected inside PySpark 4.1.2 Spark/Hadoop shaded protobuf classes. Owner: platform. Review when a newer PySpark/Spark or Hadoop runtime build with fixed protobuf is published."
+
+  - id: CVE-2022-46337
+    purls:
+      - "pkg:maven/org.apache.derby/derby"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: detected inside PySpark 4.1.2 bundled Derby JAR. Owner: platform. Review when a newer PySpark/Spark build with Derby >= 10.16.1.2 is published."
+
+  - id: CVE-2025-12183
+    purls:
+      - "pkg:maven/org.lz4/lz4-java"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: detected inside PySpark 4.1.2 bundled lz4-java JAR. Owner: platform. Review when a newer PySpark/Spark build with lz4-java >= 1.8.1 is published."
+
+  - id: CVE-2025-66566
+    purls:
+      - "pkg:maven/org.lz4/lz4-java"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: detected inside PySpark 4.1.2 bundled lz4-java JAR. Owner: platform. Review when a newer PySpark/Spark build with a fixed lz4-java release is published."
+
+  - id: CVE-2026-24281
+    purls:
+      - "pkg:maven/org.apache.zookeeper/zookeeper"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: detected inside PySpark 4.1.2 bundled ZooKeeper JAR. Owner: platform. Review when a newer PySpark/Spark build with ZooKeeper >= 3.9.5 or >= 3.8.6 is published."
+
+  - id: CVE-2026-24308
+    purls:
+      - "pkg:maven/org.apache.zookeeper/zookeeper"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: detected inside PySpark 4.1.2 bundled ZooKeeper JAR. Owner: platform. Review when a newer PySpark/Spark build with ZooKeeper >= 3.9.5 or >= 3.8.6 is published."
+
+  - id: CVE-2026-33870
+    purls:
+      - "pkg:maven/io.netty/netty-codec-http"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: detected inside PySpark 4.1.2 bundled Netty JARs. Owner: platform. Review when a newer PySpark/Spark build with fixed Netty artifacts is published."
+
+  - id: CVE-2026-33871
+    purls:
+      - "pkg:maven/io.netty/netty-codec-http2"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: detected inside PySpark 4.1.2 bundled Netty JARs. Owner: platform. Review when a newer PySpark/Spark build with fixed Netty artifacts is published."
+
+  - id: CVE-2026-42577
+    purls:
+      - "pkg:maven/io.netty/netty-transport-native-epoll"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: detected inside PySpark 4.1.2 bundled Netty JARs. Owner: platform. Review when a newer PySpark/Spark build with fixed Netty artifacts is published."
+
+  - id: CVE-2026-42579
+    purls:
+      - "pkg:maven/io.netty/netty-codec-dns"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: detected inside PySpark 4.1.2 bundled Netty JARs. Owner: platform. Review when a newer PySpark/Spark build with fixed Netty artifacts is published."
+
+  - id: CVE-2026-42582
+    purls:
+      - "pkg:maven/io.netty/netty-codec-http3"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: detected inside PySpark 4.1.2 bundled Netty JARs. Owner: platform. Review when a newer PySpark/Spark build with fixed Netty artifacts is published."
+
+  - id: CVE-2026-42583
+    purls:
+      - "pkg:maven/io.netty/netty-codec-compression"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: detected inside PySpark 4.1.2 bundled Netty JARs. Owner: platform. Review when a newer PySpark/Spark build with fixed Netty artifacts is published."
+
+  - id: CVE-2026-42584
+    purls:
+      - "pkg:maven/io.netty/netty-codec-http"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: detected inside PySpark 4.1.2 bundled Netty JARs. Owner: platform. Review when a newer PySpark/Spark build with fixed Netty artifacts is published."
+
+  - id: CVE-2026-42587
+    purls:
+      - "pkg:maven/io.netty/netty-codec-http"
+      - "pkg:maven/io.netty/netty-codec-http2"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: detected inside PySpark 4.1.2 bundled Netty JARs. Owner: platform. Review when a newer PySpark/Spark build with fixed Netty artifacts is published."

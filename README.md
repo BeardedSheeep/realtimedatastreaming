@@ -51,6 +51,8 @@ The repository already contains the Python application foundation:
 - importable `realtimedatastreaming` package;
 - `realtimedatastreaming` smoke-test CLI;
 - typed application settings with Pydantic Settings;
+- Random User ingestion boundary with typed normalized profiles;
+- HTTP timeout, retry, backoff, rate limiting, and failure classification for ingestion;
 - JSON/text logging with correlation context;
 - dependency management with `uv`;
 - developer checks orchestrated with `nox`;
@@ -88,7 +90,22 @@ The initial source is the public Random User API. Raw data is filtered into a st
 - phone number;
 - profile picture.
 
-The ingestion layer must handle HTTP timeouts, malformed payloads, missing fields, and deterministic mapping tests without real network calls.
+The implemented ingestion boundary is `realtimedatastreaming.ingestion.random_user`.
+
+It provides:
+
+- `RandomUserClient` for fetching one or more profiles from the Random User API;
+- `NormalizedUserProfile`, a typed normalized profile contract;
+- strict validation of required identity fields before returning normalized data;
+- optional handling for non-critical nested source objects such as street, coordinates, timezone, registration, and pictures;
+- HTTP timeout enforcement, including when a shared `httpx.Client` is injected;
+- explicit failure classification through `RandomUserError.reason`;
+- bounded retries for transient failures: timeouts, HTTP `429`, HTTP `5xx`, and empty `results`;
+- backoff between retries, reusing the last configured delay if the retry count exceeds the schedule;
+- a local thread-safe client-side rate limiter, defaulting to approximately 2 requests per second;
+- deterministic unit tests with `httpx.MockTransport`, without real network calls.
+
+The current normalized profile requires source identity, name, country, email, username, and date of birth. Address details, coordinates, timezone, registration date, phone numbers, pictures, and nationality are preserved when present and returned as `None` when optional source data is missing.
 
 ### Messaging
 

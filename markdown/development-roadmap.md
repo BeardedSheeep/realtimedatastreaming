@@ -66,15 +66,26 @@ Goal: ingest user profiles from the demo source without coupling business logic 
 Actions:
 
 1. Create `realtimedatastreaming/ingestion/random_user.py`.
-2. Implement an HTTP client with a timeout.
-3. Normalize Random User payloads into internal data.
-4. Handle HTTP errors, malformed responses, and missing fields.
-5. Keep unit tests free from real network calls.
+2. Implement an HTTP client with a timeout, including when a shared `httpx.Client` is injected.
+3. Normalize Random User payloads into a typed `NormalizedUserProfile`.
+4. Validate Random User responses strictly before returning a user profile.
+5. Keep critical source fields required: source user id, first name, last name, country, email, username, and date of birth.
+6. Treat non-critical nested source objects as optional when their normalized fields are nullable.
+7. Classify ingestion failures explicitly, including HTTP status codes, timeouts, invalid JSON, empty `results`, malformed responses, and missing required fields.
+8. Limit Random User calls to approximately 2 requests per second with a local thread-safe client-side rate limiter.
+9. Retry transient failures at most 2 times with backoff, including timeouts, HTTP `5xx`, HTTP `429`, and empty `results`.
+10. Reuse the final configured backoff delay if the retry count is higher than the provided backoff schedule.
+11. Fail cleanly with the final classified reason when all retry attempts are exhausted.
+12. Keep unit tests free from real network calls.
 
 Deliverables:
 
 - `RandomUserClient`;
-- source-to-event mapping function;
+- typed normalized profile contract;
+- source-to-profile mapping function;
+- strict payload validation and explicit failure classification;
+- client-side rate limiting for Random User;
+- bounded retry policy with backoff;
 - deterministic test fixtures.
 
 ## Step 4 - Schemas And Quality Rules
