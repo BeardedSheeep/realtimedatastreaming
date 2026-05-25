@@ -18,6 +18,7 @@ def test_settings_defaults() -> None:
     assert settings.kafka_bootstrap_servers == ("localhost:9092",)
     assert settings.kafka_users_created_topic == "users_created"
     assert settings.kafka_users_created_invalid_topic == "users_created_invalid"
+    assert str(settings.schema_registry_url) == "http://localhost:8081/"
     assert settings.kafka_sasl_username is None
     assert settings.kafka_sasl_password is None
     assert settings.spark_app_name == "realtimedatastreaming"
@@ -32,6 +33,8 @@ def test_settings_defaults() -> None:
     assert settings.otel_exporter_otlp_endpoint is None
     assert settings.otel_service_name == "realtimedatastreaming"
     assert settings.sentry_dsn is None
+    assert settings.pii_pseudonymization_salt is None
+    assert settings.pii_pseudonymization_salt_value is None
     assert settings.sentry_environment == "development"
     assert settings.sentry_traces_sample_rate == 0.0
 
@@ -61,6 +64,7 @@ def test_settings_read_environment_overrides(monkeypatch: Any) -> None:
     monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "kafka-a:9092, kafka-b:9092")
     monkeypatch.setenv("KAFKA_USERS_CREATED_TOPIC", "events.users.created")
     monkeypatch.setenv("KAFKA_USERS_CREATED_INVALID_TOPIC", "events.users.created.invalid")
+    monkeypatch.setenv("SCHEMA_REGISTRY_URL", "http://schema-registry:8081")
     monkeypatch.setenv("KAFKA_SASL_USERNAME", "kafka-user")
     monkeypatch.setenv("KAFKA_SASL_PASSWORD", "kafka-password")
     monkeypatch.setenv("SPARK_APP_NAME", "custom-spark-app")
@@ -74,6 +78,7 @@ def test_settings_read_environment_overrides(monkeypatch: Any) -> None:
     monkeypatch.setenv("OTEL_ENABLED", "true")
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4318")
     monkeypatch.setenv("OTEL_SERVICE_NAME", "otel-service")
+    monkeypatch.setenv("PII_PSEUDONYMIZATION_SALT", "production-salt")
     monkeypatch.setenv("SENTRY_DSN", "https://example.invalid/1")
     monkeypatch.setenv("SENTRY_ENVIRONMENT", "prod")
     monkeypatch.setenv("SENTRY_TRACES_SAMPLE_RATE", "0.25")
@@ -92,6 +97,7 @@ def test_settings_read_environment_overrides(monkeypatch: Any) -> None:
     assert settings.kafka_bootstrap_servers == ("kafka-a:9092", "kafka-b:9092")
     assert settings.kafka_users_created_topic == "events.users.created"
     assert settings.kafka_users_created_invalid_topic == "events.users.created.invalid"
+    assert str(settings.schema_registry_url) == "http://schema-registry:8081/"
     assert settings.kafka_sasl_username == "kafka-user"
     assert settings.kafka_sasl_password is not None
     assert settings.kafka_sasl_password.get_secret_value() == "kafka-password"
@@ -108,6 +114,8 @@ def test_settings_read_environment_overrides(monkeypatch: Any) -> None:
     assert settings.otel_exporter_otlp_endpoint == "http://collector:4318"
     assert settings.otel_service_name == "otel-service"
     assert settings.sentry_dsn is not None
+    assert settings.pii_pseudonymization_salt is not None
+    assert settings.pii_pseudonymization_salt_value == "production-salt"
     assert settings.sentry_dsn.get_secret_value() == "https://example.invalid/1"
     assert settings.sentry_dsn_value == "https://example.invalid/1"
     assert settings.sentry_environment == "prod"
@@ -125,3 +133,14 @@ def test_get_settings_cache_can_be_cleared(monkeypatch: Any) -> None:
     get_settings.cache_clear()
     assert get_settings().app_name == "second"
     get_settings.cache_clear()
+
+
+def test_settings_require_pii_pseudonymization_salt_outside_development(monkeypatch: Any) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+
+    try:
+        Settings()
+    except ValueError as exc:
+        assert "PII_PSEUDONYMIZATION_SALT" in str(exc)
+    else:
+        raise AssertionError("Settings should reject production without PII_PSEUDONYMIZATION_SALT")

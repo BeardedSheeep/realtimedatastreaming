@@ -28,6 +28,7 @@ def test_env_example_keeps_secret_values_empty() -> None:
     secret_variables = {
         "KAFKA_SASL_PASSWORD",
         "CASSANDRA_PASSWORD",
+        "PII_PSEUDONYMIZATION_SALT",
         "SENTRY_DSN",
     }
 

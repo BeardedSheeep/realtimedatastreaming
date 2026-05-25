@@ -6,6 +6,30 @@ from typing import Any, TypedDict
 
 import httpx
 
+RANDOM_USER_COUNTRY_CODES = {
+    "Australia": "AU",
+    "Brazil": "BR",
+    "Canada": "CA",
+    "Denmark": "DK",
+    "Finland": "FI",
+    "France": "FR",
+    "Germany": "DE",
+    "India": "IN",
+    "Iran": "IR",
+    "Ireland": "IE",
+    "Mexico": "MX",
+    "Netherlands": "NL",
+    "New Zealand": "NZ",
+    "Norway": "NO",
+    "Serbia": "RS",
+    "Spain": "ES",
+    "Switzerland": "CH",
+    "Turkey": "TR",
+    "Ukraine": "UA",
+    "United Kingdom": "GB",
+    "United States": "US",
+}
+
 
 class NormalizedUserProfile(TypedDict):
     source: str
@@ -19,6 +43,7 @@ class NormalizedUserProfile(TypedDict):
     city: str | None
     state: str | None
     country: str
+    country_code: str | None
     postcode: str | None
     latitude: str | None
     longitude: str | None
@@ -163,6 +188,7 @@ def normalize_random_user_profile(profile: Mapping[str, Any]) -> NormalizedUserP
     dob = _required_mapping(profile, "dob")
     registered = _optional_mapping(profile, "registered")
     picture = _optional_mapping(profile, "picture")
+    country = _required_str(location, "country")
 
     return {
         "source": "random_user",
@@ -175,7 +201,8 @@ def normalize_random_user_profile(profile: Mapping[str, Any]) -> NormalizedUserP
         "street_name": _optional_str(street, "name"),
         "city": _optional_str(location, "city"),
         "state": _optional_str(location, "state"),
-        "country": _required_str(location, "country"),
+        "country": country,
+        "country_code": RANDOM_USER_COUNTRY_CODES.get(country),
         "postcode": _optional_stringified(location, "postcode"),
         "latitude": _optional_str(coordinates, "latitude"),
         "longitude": _optional_str(coordinates, "longitude"),

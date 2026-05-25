@@ -63,6 +63,25 @@ class ObservabilitySettings(BaseSettings):
         return value
 
 
+class PrivacySettings(BaseSettings):
+    pii_pseudonymization_salt: SecretStr | None = Field(default=None, alias="PII_PSEUDONYMIZATION_SALT")
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    @property
+    def pii_pseudonymization_salt_value(self) -> str | None:
+        if self.pii_pseudonymization_salt is None:
+            return None
+        return self.pii_pseudonymization_salt.get_secret_value()
+
+    @field_validator("pii_pseudonymization_salt", mode="before")
+    @classmethod
+    def empty_salt_as_none(cls, value: Any) -> Any:
+        if value == "":
+            return None
+        return value
+
+
 class RandomUserSettings(BaseSettings):
     random_user_api_url: AnyHttpUrl = Field(
         default=AnyHttpUrl("https://randomuser.me/api/"), alias="RANDOM_USER_API_URL"
@@ -90,6 +109,10 @@ class KafkaSettings(BaseSettings):
         default="users_created_invalid",
         min_length=1,
         alias="KAFKA_USERS_CREATED_INVALID_TOPIC",
+    )
+    schema_registry_url: AnyHttpUrl = Field(
+        default=AnyHttpUrl("http://localhost:8081"),
+        alias="SCHEMA_REGISTRY_URL",
     )
     kafka_sasl_username: str | None = Field(default=None, alias="KAFKA_SASL_USERNAME")
     kafka_sasl_password: SecretStr | None = Field(default=None, alias="KAFKA_SASL_PASSWORD")
@@ -217,6 +240,7 @@ class Settings(BaseSettings):
         "application": ApplicationSettings,
         "logging": LoggingSettings,
         "observability": ObservabilitySettings,
+        "privacy": PrivacySettings,
         "random_user": RandomUserSettings,
         "kafka": KafkaSettings,
         "spark": SparkSettings,
@@ -226,6 +250,7 @@ class Settings(BaseSettings):
     application: ApplicationSettings = Field(default_factory=ApplicationSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
+    privacy: PrivacySettings = Field(default_factory=PrivacySettings)
     random_user: RandomUserSettings = Field(default_factory=RandomUserSettings)
     kafka: KafkaSettings = Field(default_factory=KafkaSettings)
     spark: SparkSettings = Field(default_factory=SparkSettings)
@@ -250,6 +275,10 @@ class Settings(BaseSettings):
                 normalized_data[group_name] = group_value
 
         super().__init__(**normalized_data)
+
+        if self.environment != "development" and self.privacy.pii_pseudonymization_salt is None:
+            msg = "PII_PSEUDONYMIZATION_SALT must be configured outside development"
+            raise ValueError(msg)
 
     @property
     def app_name(self) -> str:
@@ -298,6 +327,10 @@ class Settings(BaseSettings):
     @property
     def kafka_users_created_invalid_topic(self) -> str:
         return self.kafka.kafka_users_created_invalid_topic
+
+    @property
+    def schema_registry_url(self) -> AnyHttpUrl:
+        return self.kafka.schema_registry_url
 
     @property
     def kafka_sasl_username(self) -> str | None:
@@ -358,6 +391,14 @@ class Settings(BaseSettings):
     @property
     def sentry_dsn_value(self) -> str | None:
         return self.observability.sentry_dsn_value
+
+    @property
+    def pii_pseudonymization_salt(self) -> SecretStr | None:
+        return self.privacy.pii_pseudonymization_salt
+
+    @property
+    def pii_pseudonymization_salt_value(self) -> str | None:
+        return self.privacy.pii_pseudonymization_salt_value
 
     @property
     def sentry_environment(self) -> str:
