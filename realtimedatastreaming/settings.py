@@ -114,12 +114,23 @@ class KafkaSettings(BaseSettings):
         default=AnyHttpUrl("http://localhost:8081"),
         alias="SCHEMA_REGISTRY_URL",
     )
+    schema_registry_basic_auth_user_info: SecretStr | None = Field(
+        default=None,
+        alias="SCHEMA_REGISTRY_BASIC_AUTH_USER_INFO",
+    )
+    schema_registry_ssl_ca_location: str | None = Field(default=None, alias="SCHEMA_REGISTRY_SSL_CA_LOCATION")
     kafka_sasl_username: str | None = Field(default=None, alias="KAFKA_SASL_USERNAME")
     kafka_sasl_password: SecretStr | None = Field(default=None, alias="KAFKA_SASL_PASSWORD")
 
     model_config = SettingsConfigDict(extra="ignore")
 
-    @field_validator("kafka_sasl_username", "kafka_sasl_password", mode="before")
+    @field_validator(
+        "kafka_sasl_username",
+        "kafka_sasl_password",
+        "schema_registry_basic_auth_user_info",
+        "schema_registry_ssl_ca_location",
+        mode="before",
+    )
     @classmethod
     def empty_optional_secret_values_as_none(cls, value: Any) -> Any:
         if value == "":
@@ -331,6 +342,14 @@ class Settings(BaseSettings):
     @property
     def schema_registry_url(self) -> AnyHttpUrl:
         return self.kafka.schema_registry_url
+
+    @property
+    def schema_registry_basic_auth_user_info(self) -> SecretStr | None:
+        return self.kafka.schema_registry_basic_auth_user_info
+
+    @property
+    def schema_registry_ssl_ca_location(self) -> str | None:
+        return self.kafka.schema_registry_ssl_ca_location
 
     @property
     def kafka_sasl_username(self) -> str | None:

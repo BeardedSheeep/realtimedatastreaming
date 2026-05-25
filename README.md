@@ -1,48 +1,43 @@
 # Realtime User Profile Quality Streaming
 
-`realtimedatastreaming` is a real-time user profile ingestion and quality monitoring platform.
+`realtimedatastreaming` is a deliberately small real-time user profile ingestion and quality monitoring service.
 
-The project ingests user profiles, turns them into explicit events, validates and enriches them in a streaming pipeline, stores queryable profiles, and exposes enough operational signals to understand data quality in near real time.
+The product scope is intentionally limited: fetch demo user profiles, normalize them into explicit events, validate data quality, publish Kafka events, and expose enough operational signals to run the service professionally.
+
+The engineering goal is broader than the product goal: this repository should become a compact but production-grade example of CI/CD, deployment automation, observability, SRE practices, and continuous security.
 
 ## Goal
 
-The functional goal is to provide a small, demonstrable platform that answers this question:
+The functional goal is to answer one narrow question:
 
 > Are user profiles being ingested correctly, and which profiles are valid, invalid, enriched, or failing quality checks?
 
-The target pipeline follows this flow:
+The target MVP pipeline follows this flow:
 
 ```text
 Random User API
     |
     v
-Airflow DAG
+Python ingestion job
     |
     v
 Kafka topic: users_created
-    |
-    v
-Spark Streaming
-    |--------------------|
-    v                    v
-Cassandra           Kafka topic: users_created_invalid
+Kafka topic: users_created_invalid
 ```
 
 The platform should make it possible to:
 
-- orchestrate scheduled ingestion with Airflow;
 - fetch user profiles from `https://randomuser.me/api/` as a reproducible demo source;
 - normalize useful user fields into a stable `UserCreated` event;
 - publish valid ingestion events to Kafka;
 - validate required fields and basic data quality rules;
 - separate invalid profiles into a dead-letter or invalid-events topic;
-- enrich valid profiles with simple derived fields such as age, country, email domain, and ingestion timestamp;
-- observe topics with Confluent Control Center;
-- process and monitor events with Spark Streaming;
-- persist cleaned, queryable user profiles and quality counters in Cassandra;
-- keep a tested, typed, linted, and secure Python foundation ready for CI/CD.
+- run deterministic tests and a real Kafka/Schema Registry integration test;
+- keep a tested, typed, linted, secure, deployable Python foundation.
 
-The initial business use case is intentionally narrow: real-time monitoring of user profile quality. The data source can later be replaced by a real product API, CRM feed, signup stream, or partner feed without changing the pipeline shape.
+The project keeps the distributed data platform direction: Airflow, Spark, Cassandra, dashboards, and long-term analytical storage remain part of the target architecture. They are sequenced after the first production-shaped ingestion slice so the system grows with operational discipline instead of becoming a pile of services.
+
+The target operational goal is to make this small service deployable like a serious production workload: automated releases, repeatable environments, safe rollout patterns, actionable SLOs, runbooks, and security checks in the delivery path.
 
 ## Current Repository State
 
@@ -56,6 +51,8 @@ The repository already contains the Python application foundation:
 - `UserCreated` and `UserProfileInvalid` profile contracts;
 - versioned Kafka JSON Schema artifacts for Schema Registry;
 - Confluent Schema Registry registration helpers with topic-value subject naming;
+- Schema Registry-aware Kafka publisher;
+- optional Docker Compose integration test for Kafka and Schema Registry;
 - user profile quality rules with explicit rejection reasons;
 - privacy-safe invalid profile events with allowlisted payloads and salted source id pseudonymization;
 - JSON/text logging with correlation context;
@@ -65,6 +62,29 @@ The repository already contains the Python application foundation:
 - minimal application Dockerfile;
 - GitHub Actions workflows for quality, CI, and CI/CD.
 
+## Product Scope
+
+### In Scope
+
+- Random User ingestion boundary;
+- normalized user profile event contracts;
+- semantic quality validation;
+- privacy-reduced invalid events;
+- Kafka publication with Schema Registry JSON Schema contracts;
+- Airflow DAG orchestration;
+- Spark Streaming processing;
+- Cassandra persistence for queryable profiles and quality views;
+- local and CI quality gates;
+- optional local integration test against real Kafka and Schema Registry;
+- deployment and SRE documentation.
+
+### Out Of Scope
+
+- multi-source ingestion;
+- complex enrichment beyond simple quality metadata.
+
+The first deployable slice is intentionally narrow, but Airflow orchestration, Spark Streaming processing, and Cassandra persistence remain part of the project scope and must be implemented as staged platform capabilities.
+
 ## Planned Architecture
 
 ### Functional Domain
@@ -72,13 +92,14 @@ The repository already contains the Python application foundation:
 The core domain is user profile ingestion quality:
 
 - `UserCreated`: normalized user profile accepted by the ingestion boundary;
-- `UserProfileValidated`: enriched profile that passed stream validation;
-- `UserProfileInvalid`: rejected profile with a reason and enough context to debug;
-- quality metrics: counts by validation status, country code, source, and processing window.
+- `UserProfileInvalid`: rejected profile with explicit rejection reasons;
+- quality counters: counts by validation status, source, and rejection reason.
 
-### Orchestration
+### Execution Model
 
-Airflow drives scheduled ingestion. The DAG stays thin and calls application code responsible for fetching, normalizing, validating at the boundary, and publishing user profile events.
+The first execution model is a small Python ingestion job. It calls application code responsible for fetching, normalizing, validating, and publishing user profile events.
+
+Scheduling starts with Kubernetes CronJob for a production-shaped MVP. Airflow is still part of the target platform and should take over when the pipeline has multiple tasks, backfills, retries, dataset dependencies, and operational ownership needs.
 
 ### Ingestion
 
@@ -175,7 +196,7 @@ Invalid events are intentionally privacy-reduced:
 
 ### Processing
 
-Spark Streaming will consume Kafka messages, validate payloads, enrich valid profiles, emit invalid profiles with reasons, and prepare rows for storage.
+Processing is intentionally minimal in the first deployable slice. The ingestion job validates profiles before publishing and routes invalid profiles to the invalid-events topic.
 
 Implemented quality rules currently cover:
 
@@ -190,13 +211,13 @@ Implemented quality rules currently cover:
 - timezone offset sanity;
 - HTTPS picture URL checks.
 
-Duplicate handling remains a future processing concern for the chosen stream key.
+Spark Streaming remains the target distributed processing layer. It should be introduced once Kafka publication is stable and there is a concrete need for stream validation, enrichment, repartitioning, or stateful quality counters.
 
 ### Storage
 
-Cassandra will store processed user profiles and quality monitoring views. The schema must be designed from expected query patterns, not only as a copy of the source JSON.
+Cassandra remains the target storage layer for queryable profiles and quality monitoring views. It is not required for the first deployable slice, but it is part of the intended distributed system.
 
-Candidate query patterns:
+Its schema must be designed from query patterns rather than copied from source JSON. Candidate query patterns:
 
 - latest valid profiles by ingestion time;
 - valid profiles by country;
@@ -207,15 +228,149 @@ Candidate query patterns:
 
 | Service | Role | Local port |
 |---|---|---:|
-| Zookeeper | Historical Kafka coordination | `2181` |
-| Kafka broker | Event bus | `9092` |
-| Schema Registry | Schema registry | `8081` |
-| Control Center | Confluent UI | `9021` |
-| Airflow webserver | Airflow UI | `8080` |
-| Postgres | Airflow metadata | internal |
-| Spark master | Spark cluster | `9090`, `7077` |
-| Spark worker | Spark execution | internal |
-| Cassandra | Final storage | `9042` |
+| Kafka broker | Event bus | `19092` locally / platform-managed in envs |
+| Schema Registry | Kafka value contract registry | `18081` locally / platform-managed in envs |
+| Airflow | Pipeline orchestration and backfills | future local stack |
+| Spark | Distributed stream processing | future local stack |
+| Cassandra | Queryable profile and quality views | future local stack |
+
+Local services should be added in phases: Kafka and Schema Registry first, then Airflow, then Spark, then Cassandra, with healthchecks and runbooks at each step.
+
+## Delivery And SRE Target
+
+This repository should evolve toward a small service delivered with professional platform practices.
+
+### Deployment Strategy
+
+- Build immutable container images from the application `Dockerfile`.
+- Keep all deployment manifests versioned in Git.
+- Use Kubernetes CronJob as the first production-shaped deployment target.
+- Keep the workload stateless and environment-configured.
+- Use `concurrencyPolicy: Forbid` for the MVP so scheduled runs do not overlap.
+- Promote immutable SHA-tagged images between environments.
+- Roll back by redeploying the previous known-good image tag and pausing the CronJob if publication is unsafe.
+- Promote orchestration from CronJob to Airflow when the pipeline has multiple tasks, backfills, retries, and dataset dependencies.
+
+The MVP deployment target is:
+
+| Concern | Decision |
+|---|---|
+| Runtime | Kubernetes CronJob |
+| State | Stateless application process |
+| Schedule | Platform-owned CronJob schedule |
+| Image | Immutable SHA-tagged container |
+| Config | Environment variables from ConfigMap and Secret |
+| Secrets | Kubernetes Secret or external secret manager |
+| Rollback | Previous known-good image tag |
+| Scaling | One job at a time for the MVP |
+| Persistence | None in the MVP |
+
+Target platform progression:
+
+| Phase | Runtime | Purpose |
+|---|---|---|
+| 1 | Kubernetes CronJob + Kafka + Schema Registry | production-shaped ingestion and publication |
+| 2 | Airflow + Kafka + Schema Registry | scheduled orchestration, retries, backfills, ownership |
+| 3 | Airflow + Kafka + Spark | distributed validation and enrichment |
+| 4 | Airflow + Kafka + Spark + Cassandra | queryable profiles and quality views |
+
+### Release Process
+
+The intended release path is:
+
+1. merge to `main`;
+2. run format, lint, typing, unit tests, dependency audit, and security scans;
+3. build and scan the container image;
+4. deploy automatically to a non-production environment;
+5. run smoke and integration tests;
+6. promote to production with an explicit approval gate;
+7. monitor SLO and rollback indicators after release.
+
+Manual production changes should be exceptional, documented, and traceable.
+
+Release gates are:
+
+| Stage | Trigger | Required | Checks |
+|---|---|---|---|
+| PR quality | `pull_request` | Yes | format, lint, typing, unit tests, dependency audit |
+| Mainline security | push to `main` | Yes | image build, image smoke test, Trivy, OSV, Gitleaks |
+| Integration | manual or scheduled | Before release | real Kafka and Schema Registry publish/consume test |
+| Promotion | release approval | Yes | deploy immutable image, run smoke checks, watch SLO indicators |
+
+### Operations
+
+Day-2 operations should be documented before the system grows:
+
+- startup and shutdown commands;
+- Kafka and Schema Registry diagnostics;
+- replay and duplicate-handling notes;
+- rollback procedure;
+- dependency and base-image patching cadence;
+- Cassandra backup and restore procedures before Cassandra is promoted beyond local/demo use.
+
+Rollback policy:
+
+1. stop or suspend the CronJob if the current image is actively producing bad events;
+2. redeploy the previous known-good image SHA;
+3. run the post-deploy smoke check;
+4. verify Kafka publication success rate and invalid-event rate;
+5. document whether replay is required.
+
+Data loss and duplicate policy:
+
+- Kafka producer idempotence is enabled, but end-to-end exactly-once processing is not claimed.
+- The event key is the source user id when available.
+- Retries may produce duplicates if the caller retries after an ambiguous delivery outcome.
+- Consumers must be designed to tolerate duplicate `source_user_id` events.
+- Replay is manual until a dedicated replay command exists.
+- Once Cassandra is introduced, writes must be idempotent by source id, event type, and processing timestamp/window.
+
+### Observability And SLOs
+
+The MVP should expose signals that map to the real user journey:
+
+- ingestion attempts;
+- successful `UserCreated` publications;
+- invalid-profile publications;
+- publication failures;
+- Random User API latency and failure reasons;
+- Schema Registry and Kafka delivery failures.
+
+Initial SLO candidates:
+
+| SLI | Source | SLO | Alert | Runbook |
+|---|---|---:|---|---|
+| Ingestion success rate | app counter | >= 99% over 24h | burn rate > 2x for 30m | ingestion failures |
+| Kafka publish latency | app histogram | p99 < 30s over 24h | p99 > 30s for 15m | Kafka publication |
+| Kafka publish success rate | app counter | >= 99% over 24h | burn rate > 2x for 30m | Kafka publication |
+| Invalid event quality | app counter / test | 100% have rejection reasons | any missing reason | quality rules |
+| Secret hygiene | CI secret scans | 0 known committed secrets | any finding | security incident |
+
+Alerts should favor SLO or burn-rate style symptoms over raw CPU or disk thresholds.
+
+### Continuous Security
+
+Security is part of delivery, not a separate final step:
+
+- dependency audit with `pip-audit`;
+- container and filesystem scanning;
+- secret scanning;
+- pinned Docker image versions;
+- environment-based configuration;
+- no hardcoded secrets;
+- salted pseudonymization for invalid-event source ids outside development;
+- future Kubernetes policy checks through OPA Gatekeeper or Kyverno when manifests exist.
+
+Runtime hardening target:
+
+- run as non-root;
+- read-only root filesystem where practical;
+- drop Linux capabilities;
+- set CPU and memory requests and limits;
+- mount secrets as environment variables or files from a managed secret source;
+- avoid printing secrets or raw invalid payloads;
+- restrict egress to Random User API, Kafka, Schema Registry, and telemetry endpoints;
+- rotate Kafka and Schema Registry credentials before production use.
 
 ## Local Development
 
@@ -244,8 +399,12 @@ uv run nox -s format
 uv run nox -s lint
 uv run nox -s typing
 uv run nox -s test
+uv run nox -s integration
 uv run nox -s audit
 ```
+
+The integration session is optional and starts the Kafka and Schema Registry
+stack defined in `realtimedatastreaming/docker-compose.integration.yml`.
 
 Test the current CLI:
 
@@ -257,21 +416,27 @@ uv run realtimedatastreaming
 
 Application variables are documented in [.env.example](.env.example), which is the source of truth for local configuration.
 
-Important variables added for profile contracts and privacy:
+Important variables for profile contracts, messaging, and privacy:
 
 - `SCHEMA_REGISTRY_URL`: Confluent Schema Registry endpoint.
+- `SCHEMA_REGISTRY_BASIC_AUTH_USER_INFO`: optional Schema Registry basic auth value.
+- `SCHEMA_REGISTRY_SSL_CA_LOCATION`: optional Schema Registry CA bundle path.
+- `KAFKA_BOOTSTRAP_SERVERS`: Kafka bootstrap servers.
+- `KAFKA_USERS_CREATED_TOPIC`: valid user profile event topic.
+- `KAFKA_USERS_CREATED_INVALID_TOPIC`: invalid user profile event topic.
 - `PII_PSEUDONYMIZATION_SALT`: required outside `development` to pseudonymize invalid-event source ids.
 
-Future Airflow, Kafka, Cassandra, Sentry, OpenTelemetry, and privacy secrets must be removed from code and injected through environment variables.
+Airflow, Spark, Cassandra, Sentry, OpenTelemetry, and cloud secrets must be injected through environment variables or a managed secret store.
 
 ## Roadmap
 
 The detailed roadmap is available in [markdown/development-roadmap.md](markdown/development-roadmap.md).
 
-The main stages are:
+The main stages are now:
 
 1. define the application modules under `realtimedatastreaming/`;
 2. implement ingestion and quality rules;
-3. publish and validate profile events;
-4. process streams and persist quality views;
-5. keep orchestration, infra, tests, and documentation clean.
+3. publish and validate Kafka events;
+4. add deployment automation and release gates;
+5. add SRE runbooks, SLOs, and security controls;
+6. add Airflow, Spark, and Cassandra as staged distributed-system capabilities with explicit operational gates.
