@@ -6,6 +6,9 @@ on:
 permissions:
   contents: read
 
+env:
+  UV_VERSION: "0.11.13"
+
 jobs:
   audit:
     name: Dependency audit
@@ -19,8 +22,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v7
+      - name: Install uv
+        run: |
+          python -m pip install --disable-pip-version-check "uv==${UV_VERSION}" || {
+            curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" -o /tmp/install-uv.sh
+            sh /tmp/install-uv.sh
+            echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+            export PATH="${HOME}/.local/bin:${PATH}"
+          }
+          uv --version
 
       - name: Install dependencies
         run: uv sync --all-groups --locked
@@ -41,8 +51,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v7
+      - name: Install uv
+        run: |
+          python -m pip install --disable-pip-version-check "uv==${UV_VERSION}" || {
+            curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" -o /tmp/install-uv.sh
+            sh /tmp/install-uv.sh
+            echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+            export PATH="${HOME}/.local/bin:${PATH}"
+          }
+          uv --version
 
       - name: Install dependencies
         run: uv sync --all-groups --locked
@@ -63,8 +80,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v7
+      - name: Install uv
+        run: |
+          python -m pip install --disable-pip-version-check "uv==${UV_VERSION}" || {
+            curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" -o /tmp/install-uv.sh
+            sh /tmp/install-uv.sh
+            echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+            export PATH="${HOME}/.local/bin:${PATH}"
+          }
+          uv --version
 
       - name: Install dependencies
         run: uv sync --all-groups --locked
@@ -85,8 +109,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v7
+      - name: Install uv
+        run: |
+          python -m pip install --disable-pip-version-check "uv==${UV_VERSION}" || {
+            curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" -o /tmp/install-uv.sh
+            sh /tmp/install-uv.sh
+            echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+            export PATH="${HOME}/.local/bin:${PATH}"
+          }
+          uv --version
 
       - name: Install dependencies
         run: uv sync --all-groups --locked
@@ -107,8 +138,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v7
+      - name: Install uv
+        run: |
+          python -m pip install --disable-pip-version-check "uv==${UV_VERSION}" || {
+            curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" -o /tmp/install-uv.sh
+            sh /tmp/install-uv.sh
+            echo "${HOME}/.local/bin" >> "${GITHUB_PATH}"
+            export PATH="${HOME}/.local/bin:${PATH}"
+          }
+          uv --version
 
       - name: Install dependencies
         run: uv sync --all-groups --locked

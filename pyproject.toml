@@ -30,6 +30,8 @@ dependencies = [
     "confluent-kafka>=2.8.0,<3.0.0",
     "email-validator>=2.0.0,<3.0.0",
     "httpx>=0.28.0,<1.0.0",
+    "jsonschema>=4.26.0",
+    "orjson>=3.11.9",
     "pydantic>=2.0.0,<3.0.0",
     "pydantic-settings>=2.0.0,<3.0.0",
     "pyspark>=4.1.2,<5.0.0",
@@ -119,6 +121,15 @@ check_untyped_defs = true
 warn_unused_configs = true
 warn_redundant_casts = true
 warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+addopts = [
+    "-m",
+    "not integration",
+]
+markers = [
+    "integration: tests that require external services such as Kafka or Schema Registry",
+]
 
 [tool.coverage.run]
 branch = true

@@ -62,6 +62,20 @@ def test(session: Session) -> None:
 
 
 @nox.session(python=PYTHON_VERSION)
+def integration(session: Session) -> None:
+    compose_file = PROJECT_DIR / PROJECT_PACKAGE / "docker-compose.integration.yml"
+    if not compose_file.exists():
+        session.error(f"Integration compose file not found: {compose_file}")
+
+    session.run("uv", "sync", "--active", "--all-extras", "--all-groups", "--locked", external=True)
+    session.run("docker", "compose", "-f", str(compose_file), "up", "-d", external=True)
+    try:
+        session.run("pytest", "tests/integration", "-m", "integration", *session.posargs)
+    finally:
+        session.run("docker", "compose", "-f", str(compose_file), "down", "-v", external=True)
+
+
+@nox.session(python=PYTHON_VERSION)
 def audit(session: Session) -> None:
     session.run("uv", "sync", "--active", "--all-extras", "--all-groups", "--locked", external=True)
     session.run("pip-audit")
