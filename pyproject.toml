@@ -24,8 +24,11 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    "authlib>=1.3.0,<2.0.0",
+    "cachetools>=5.0.0,<7.0.0",
     "cassandra-driver>=3.29.0,<4.0.0",
     "confluent-kafka>=2.8.0,<3.0.0",
+    "email-validator>=2.0.0,<3.0.0",
     "httpx>=0.28.0,<1.0.0",
     "pydantic>=2.0.0,<3.0.0",
     "pydantic-settings>=2.0.0,<3.0.0",

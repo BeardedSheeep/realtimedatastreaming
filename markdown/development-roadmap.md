@@ -10,6 +10,8 @@ realtimedatastreaming/
         random_user.py
         schemas.py
         quality.py
+        schema_registry.py
+        schema_registry_schemas/
     messaging/
         kafka_producer.py
         topics.py
@@ -49,9 +51,11 @@ Actions:
 
 1. Add Random User API URL and HTTP timeout settings.
 2. Add Kafka bootstrap servers and topic names.
-3. Add Spark checkpoint and application settings.
-4. Add Cassandra host and keyspace settings.
-5. Keep secrets injected through environment variables.
+3. Add Schema Registry URL.
+4. Add privacy settings such as `PII_PSEUDONYMIZATION_SALT`.
+5. Add Spark checkpoint and application settings.
+6. Add Cassandra host and keyspace settings.
+7. Keep secrets injected through environment variables.
 
 Deliverables:
 
@@ -70,19 +74,21 @@ Actions:
 3. Normalize Random User payloads into a typed `NormalizedUserProfile`.
 4. Validate Random User responses strictly before returning a user profile.
 5. Keep critical source fields required: source user id, first name, last name, country, email, username, and date of birth.
-6. Treat non-critical nested source objects as optional when their normalized fields are nullable.
-7. Classify ingestion failures explicitly, including HTTP status codes, timeouts, invalid JSON, empty `results`, malformed responses, and missing required fields.
-8. Limit Random User calls to approximately 2 requests per second with a local thread-safe client-side rate limiter.
-9. Retry transient failures at most 2 times with backoff, including timeouts, HTTP `5xx`, HTTP `429`, and empty `results`.
-10. Reuse the final configured backoff delay if the retry count is higher than the provided backoff schedule.
-11. Fail cleanly with the final classified reason when all retry attempts are exhausted.
-12. Keep unit tests free from real network calls.
+6. Derive ISO-3166 alpha-2 `country_code` for supported Random User countries.
+7. Treat non-critical nested source objects as optional when their normalized fields are nullable.
+8. Classify ingestion failures explicitly, including HTTP status codes, timeouts, invalid JSON, empty `results`, malformed responses, and missing required fields.
+9. Limit Random User calls to approximately 2 requests per second with a local thread-safe client-side rate limiter.
+10. Retry transient failures at most 2 times with backoff, including timeouts, HTTP `5xx`, HTTP `429`, and empty `results`.
+11. Reuse the final configured backoff delay if the retry count is higher than the provided backoff schedule.
+12. Fail cleanly with the final classified reason when all retry attempts are exhausted.
+13. Keep unit tests free from real network calls.
 
 Deliverables:
 
 - `RandomUserClient`;
 - typed normalized profile contract;
 - source-to-profile mapping function;
+- country code derivation for Random User countries;
 - strict payload validation and explicit failure classification;
 - client-side rate limiting for Random User;
 - bounded retry policy with backoff;
@@ -90,22 +96,39 @@ Deliverables:
 
 ## Step 4 - Schemas And Quality Rules
 
+Status: implemented.
+
 Goal: define the user profile quality contract before publishing or processing events.
 
 Actions:
 
 1. Create `realtimedatastreaming/ingestion/schemas.py`.
-2. Define `UserCreated`.
+2. Define `UserCreated` with typed structured fields: email, datetimes, coordinates, picture URLs, and optional `country_code`.
 3. Define `UserProfileInvalid`.
 4. Create `realtimedatastreaming/ingestion/quality.py`.
-5. Validate required identity fields, email shape, username, country, and plausible age.
+5. Validate semantic profile quality after schema validation.
 6. Return explicit rejection reasons.
+7. Create versioned Kafka JSON Schema artifacts under `realtimedatastreaming/ingestion/schema_registry_schemas/`.
+8. Register Kafka value contracts through the official Confluent Schema Registry client.
+9. Use topic-value subject naming, including subjects derived from configured topic names.
+10. Route invalid events with privacy-safe payloads and salted source id pseudonymization.
 
 Deliverables:
 
 - Pydantic event models;
+- Kafka-facing JSON Schema artifacts;
+- Schema Registry registration helpers;
 - quality rule functions;
-- unit tests for valid and invalid profiles.
+- privacy-safe invalid event builder;
+- unit and contract tests for valid and invalid profiles.
+
+Implementation notes:
+
+- `UserCreated` is the normalized profile event accepted by the ingestion boundary.
+- `UserProfileInvalid` carries rejection reasons and a small allowlisted payload for DLQ/debug use.
+- Invalid payloads intentionally keep only `schema_version`, `event_type`, `source`, and `country_code`.
+- `PII_PSEUDONYMIZATION_SALT` is required outside `development`.
+- Current tests are deterministic and avoid real Kafka or Schema Registry network calls.
 
 ## Step 5 - Messaging
 
@@ -117,13 +140,15 @@ Actions:
 2. Define `users_created` and `users_created_invalid`.
 3. Create `realtimedatastreaming/messaging/kafka_producer.py`.
 4. Encapsulate producer creation, publish, flush, and close.
-5. Log publication outcomes.
-6. Add producer tests with mocks.
+5. Serialize values using the Schema Registry contracts.
+6. Log publication outcomes.
+7. Add producer tests with mocks.
 
 Deliverables:
 
 - topic catalog;
 - reusable Kafka producer;
+- Schema Registry-aware serialization;
 - publication tests.
 
 ## Step 6 - Orchestration
@@ -155,9 +180,9 @@ Actions:
 1. Create `realtimedatastreaming/streaming/spark_job.py`.
 2. Consume the `users_created` topic.
 3. Parse event payloads.
-4. Apply quality rules.
+4. Apply profile schema and quality rules.
 5. Enrich valid profiles with age, country, email domain, and processing timestamp.
-6. Route invalid records with rejection reasons.
+6. Route invalid records with rejection reasons and privacy-safe invalid payloads.
 7. Configure checkpoints.
 
 Deliverables:

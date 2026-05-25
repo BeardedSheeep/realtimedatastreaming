@@ -24,6 +24,7 @@ def test_normalize_random_user_response_maps_source_payload(
             "city": "London",
             "state": "Greater London",
             "country": "United Kingdom",
+            "country_code": "GB",
             "postcode": "SW1A 1AA",
             "latitude": "51.5072",
             "longitude": "-0.1276",

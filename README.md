@@ -53,6 +53,11 @@ The repository already contains the Python application foundation:
 - typed application settings with Pydantic Settings;
 - Random User ingestion boundary with typed normalized profiles;
 - HTTP timeout, retry, backoff, rate limiting, and failure classification for ingestion;
+- `UserCreated` and `UserProfileInvalid` profile contracts;
+- versioned Kafka JSON Schema artifacts for Schema Registry;
+- Confluent Schema Registry registration helpers with topic-value subject naming;
+- user profile quality rules with explicit rejection reasons;
+- privacy-safe invalid profile events with allowlisted payloads and salted source id pseudonymization;
 - JSON/text logging with correlation context;
 - dependency management with `uv`;
 - developer checks orchestrated with `nox`;
@@ -69,7 +74,7 @@ The core domain is user profile ingestion quality:
 - `UserCreated`: normalized user profile accepted by the ingestion boundary;
 - `UserProfileValidated`: enriched profile that passed stream validation;
 - `UserProfileInvalid`: rejected profile with a reason and enough context to debug;
-- quality metrics: counts by validation status, country, source, and processing window.
+- quality metrics: counts by validation status, country code, source, and processing window.
 
 ### Orchestration
 
@@ -83,6 +88,7 @@ The initial source is the public Random User API. Raw data is filtered into a st
 - gender;
 - address;
 - country;
+- ISO-3166 alpha-2 country code when it can be derived;
 - email;
 - username;
 - date of birth;
@@ -97,6 +103,7 @@ It provides:
 - `RandomUserClient` for fetching one or more profiles from the Random User API;
 - `NormalizedUserProfile`, a typed normalized profile contract;
 - strict validation of required identity fields before returning normalized data;
+- derivation of `country_code` for supported Random User countries;
 - optional handling for non-critical nested source objects such as street, coordinates, timezone, registration, and pictures;
 - HTTP timeout enforcement, including when a shared `httpx.Client` is injected;
 - explicit failure classification through `RandomUserError.reason`;
@@ -105,7 +112,7 @@ It provides:
 - a local thread-safe client-side rate limiter, defaulting to approximately 2 requests per second;
 - deterministic unit tests with `httpx.MockTransport`, without real network calls.
 
-The current normalized profile requires source identity, name, country, email, username, and date of birth. Address details, coordinates, timezone, registration date, phone numbers, pictures, and nationality are preserved when present and returned as `None` when optional source data is missing.
+The current normalized profile requires source identity, name, country, email, username, and date of birth. Address details, coordinates, timezone, registration date, phone numbers, pictures, nationality, and country code are preserved or derived when present and returned as `None` when optional source data is missing.
 
 ### Messaging
 
@@ -121,20 +128,69 @@ Invalid events are published to:
 users_created_invalid
 ```
 
-The Confluent stack includes Schema Registry and Control Center to prepare for explicit message schemas and better topic observability.
+The Confluent stack includes Schema Registry and Control Center to provide explicit message schemas and better topic observability.
+
+Kafka value contracts are stored as versioned JSON Schema artifacts in
+`realtimedatastreaming/ingestion/schema_registry_schemas/` and use the standard topic-value subject naming strategy:
+
+- `users_created-value`
+- `users_created_invalid-value`
+
+Subjects can also be derived from configured topic names. For example, `KAFKA_USERS_CREATED_TOPIC=events.users.created` maps to the Schema Registry subject `events.users.created-value`.
+
+Pydantic models remain Python DTOs for local validation, but the JSON Schema artifacts are the Kafka-facing contracts to register with Schema Registry. Registration is handled through the official Confluent Schema Registry client in `realtimedatastreaming.ingestion.schema_registry`.
+
+### Profile Contracts And Quality
+
+The implemented profile contract module is `realtimedatastreaming.ingestion.schemas`.
+
+`UserCreated` validates the structured event shape before quality rules run:
+
+- required source identity, name, country, email, username, and date of birth;
+- typed email through Pydantic `EmailStr`;
+- typed `date_of_birth` and `registered_at` datetimes;
+- bounded numeric latitude and longitude;
+- typed picture URLs;
+- optional ISO-3166 alpha-2 `country_code`.
+
+The implemented quality module is `realtimedatastreaming.ingestion.quality`.
+
+It provides:
+
+- `validate_user_profile_quality` for semantic quality checks;
+- `is_valid_user_profile` as a boolean convenience wrapper;
+- `build_invalid_user_profile_event` for dead-letter or invalid-events topics;
+- source-specific Random User country-name validation;
+- ISO country code and nationality validation;
+- plausible age checks;
+- registration date checks;
+- timezone offset checks;
+- granular picture URL rejection reasons such as `invalid_picture_url:picture_large`.
+
+Invalid events are intentionally privacy-reduced:
+
+- `source_user_id` is pseudonymized with salted HMAC-SHA256;
+- `PII_PSEUDONYMIZATION_SALT` is required outside `development`;
+- invalid payloads use a strict allowlist: `schema_version`, `event_type`, `source`, and `country_code`.
 
 ### Processing
 
 Spark Streaming will consume Kafka messages, validate payloads, enrich valid profiles, emit invalid profiles with reasons, and prepare rows for storage.
 
-Initial quality rules should stay simple:
+Implemented quality rules currently cover:
 
 - required identity fields are present;
 - email has a valid shape;
-- date of birth is parseable and produces a plausible age;
+- date of birth produces a plausible age;
 - username is present;
 - country is present;
-- duplicate handling is explicit for the chosen key.
+- source-specific country validation where applicable;
+- ISO country code and nationality validation;
+- registration date consistency;
+- timezone offset sanity;
+- HTTPS picture URL checks.
+
+Duplicate handling remains a future processing concern for the chosen stream key.
 
 ### Storage
 
@@ -201,7 +257,12 @@ uv run realtimedatastreaming
 
 Application variables are documented in [.env.example](.env.example), which is the source of truth for local configuration.
 
-Future Airflow, Kafka, Cassandra, Sentry, and OpenTelemetry secrets must be removed from code and injected through environment variables.
+Important variables added for profile contracts and privacy:
+
+- `SCHEMA_REGISTRY_URL`: Confluent Schema Registry endpoint.
+- `PII_PSEUDONYMIZATION_SALT`: required outside `development` to pseudonymize invalid-event source ids.
+
+Future Airflow, Kafka, Cassandra, Sentry, OpenTelemetry, and privacy secrets must be removed from code and injected through environment variables.
 
 ## Roadmap
 
