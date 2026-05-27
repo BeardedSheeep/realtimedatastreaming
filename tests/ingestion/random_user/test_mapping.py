@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 from collections.abc import Callable
 from typing import Any, cast
 
@@ -44,21 +46,10 @@ def test_normalize_random_user_response_maps_source_payload(
     ]
 
 
-def test_normalize_random_user_response_rejects_missing_required_field(
-    random_user_payload_factory: Callable[..., dict[str, Any]],
-) -> None:
-    payload = random_user_payload_factory()
-    del payload["results"][0]["email"]
-
-    with pytest.raises(RandomUserPayloadError, match="email") as exc_info:
-        normalize_random_user_response(payload)
-
-    assert exc_info.value.reason == "invalid_payload"
-
-
 @pytest.mark.parametrize(
     "field_path",
     [
+        ("results", 0, "email"),
         ("results", 0, "login", "uuid"),
         ("results", 0, "login", "username"),
         ("results", 0, "name", "first"),

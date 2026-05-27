@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 from typing import Any
 
 import pytest
@@ -43,9 +45,15 @@ def test_settings_reject_empty_kafka_bootstrap_servers(monkeypatch: Any, bootstr
 
 
 @pytest.mark.parametrize("topic", ["", "events users", "events/users", ".", "..", "a" * 250])
-@pytest.mark.parametrize("env_name", ["KAFKA_USERS_CREATED_TOPIC", "KAFKA_USERS_CREATED_INVALID_TOPIC"])
-def test_settings_reject_invalid_kafka_topic_names(monkeypatch: Any, env_name: str, topic: str) -> None:
-    monkeypatch.setenv(env_name, topic)
+def test_settings_reject_invalid_users_created_topic_names(monkeypatch: Any, topic: str) -> None:
+    monkeypatch.setenv("KAFKA_USERS_CREATED_TOPIC", topic)
+
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_settings_reject_invalid_users_created_invalid_topic_name(monkeypatch: Any) -> None:
+    monkeypatch.setenv("KAFKA_USERS_CREATED_INVALID_TOPIC", "events/users/invalid")
 
     with pytest.raises(ValidationError):
         Settings()

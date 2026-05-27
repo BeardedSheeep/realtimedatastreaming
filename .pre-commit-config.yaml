@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 repos:
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.21.2

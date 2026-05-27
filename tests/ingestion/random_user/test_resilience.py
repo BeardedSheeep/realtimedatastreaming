@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 from collections.abc import Callable
 from typing import Any
 

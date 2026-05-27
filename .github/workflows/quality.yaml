@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 name: Quality
 
 on:
@@ -10,6 +12,16 @@ env:
   UV_VERSION: "0.11.13"
 
 jobs:
+  actionlint:
+    name: GitHub Actions lint
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run actionlint
+        uses: devops-actions/actionlint@v0.1.10
+
   audit:
     name: Dependency audit
     runs-on: ubuntu-24.04
@@ -32,8 +44,8 @@ jobs:
           }
           uv --version
 
-      - name: Install dependencies
-        run: uv sync --all-groups --locked
+      - name: Install nox
+        run: uv sync --only-group dev --locked
 
       - name: Run dependency audit
         run: uv run nox -s audit
@@ -61,8 +73,8 @@ jobs:
           }
           uv --version
 
-      - name: Install dependencies
-        run: uv sync --all-groups --locked
+      - name: Install nox
+        run: uv sync --only-group dev --locked
 
       - name: Run format session
         run: uv run nox -s format
@@ -90,8 +102,8 @@ jobs:
           }
           uv --version
 
-      - name: Install dependencies
-        run: uv sync --all-groups --locked
+      - name: Install nox
+        run: uv sync --only-group dev --locked
 
       - name: Run lint session
         run: uv run nox -s lint
@@ -119,8 +131,8 @@ jobs:
           }
           uv --version
 
-      - name: Install dependencies
-        run: uv sync --all-groups --locked
+      - name: Install nox
+        run: uv sync --only-group dev --locked
 
       - name: Run typing session
         run: uv run nox -s typing
@@ -148,8 +160,8 @@ jobs:
           }
           uv --version
 
-      - name: Install dependencies
-        run: uv sync --all-groups --locked
+      - name: Install nox
+        run: uv sync --only-group dev --locked
 
       - name: Run test session
         run: uv run nox -s test

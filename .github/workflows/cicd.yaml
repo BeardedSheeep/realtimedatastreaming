@@ -1,7 +1,11 @@
+# Copyright (c) 2026 BeardedSheeep
+
 name: CICD
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
 
@@ -12,6 +16,59 @@ env:
   UV_VERSION: "0.11.13"
 
 jobs:
+  scan_policy:
+    name: Security scan policy
+    runs-on: ubuntu-24.04
+    outputs:
+      full_security: ${{ steps.policy.outputs.full_security }}
+      image_security: ${{ steps.policy.outputs.image_security }}
+      dependency_security: ${{ steps.policy.outputs.dependency_security }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed files
+        id: policy
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" > changed-files.txt
+          elif [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" > changed-files.txt
+          else
+            git ls-files > changed-files.txt
+          fi
+
+          image_security=false
+          dependency_security=false
+          full_security=false
+
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            image_security=true
+            dependency_security=true
+            full_security=true
+          else
+            while IFS= read -r file; do
+              case "${file}" in
+                Dockerfile|.dockerignore|realtimedatastreaming/docker-compose.integration.yml)
+                  image_security=true
+                  full_security=true
+                  ;;
+                pyproject.toml|uv.lock|.trivyignore.yaml|scripts/*|.github/workflows/*)
+                  dependency_security=true
+                  full_security=true
+                  ;;
+              esac
+            done < changed-files.txt
+          fi
+
+          {
+            echo "full_security=${full_security}"
+            echo "image_security=${image_security}"
+            echo "dependency_security=${dependency_security}"
+          } >> "${GITHUB_OUTPUT}"
+
   quality:
     name: Quality
     uses: ./.github/workflows/quality.yaml
@@ -30,21 +87,60 @@ jobs:
   build_image:
     name: Build and smoke image
     runs-on: ubuntu-24.04
-    needs: [quality, trivyignore_expiry]
+    needs: [scan_policy, quality, trivyignore_expiry]
+    if: github.event_name != 'pull_request' || needs.scan_policy.outputs.image_security == 'true' || needs.scan_policy.outputs.dependency_security == 'true'
+    permissions:
+      contents: read
+      packages: write
     outputs:
       image: ${{ steps.image.outputs.image }}
       tag: ${{ steps.image.outputs.tag }}
+      cache: ${{ steps.image.outputs.cache }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Set image metadata
         id: image
         run: |
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
           tag="${GITHUB_SHA}"
-          echo "image=${image}" >> "${GITHUB_OUTPUT}"
-          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          cache="${image}:buildcache"
+          {
+            echo "image=${image}"
+            echo "tag=${tag}"
+            echo "cache=${cache}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Set Docker cache policy
+        id: cache
+        run: |
+          cache_ref="${{ steps.image.outputs.cache }}"
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+            cache_from=""
+            cache_to=""
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            cache_from="type=registry,ref=${cache_ref}"
+            cache_to=""
+          else
+            cache_from="type=registry,ref=${cache_ref}"
+            cache_to="type=registry,ref=${cache_ref},mode=max"
+          fi
+          {
+            echo "cache_from=${cache_from}"
+            echo "cache_to=${cache_to}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Log in to GHCR for build cache
+        if: steps.cache.outputs.cache_from != '' || steps.cache.outputs.cache_to != ''
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -61,13 +157,15 @@ jobs:
           }
           uv --version
 
-      - name: Install dependencies
-        run: uv sync --all-groups --locked
+      - name: Install nox
+        run: uv sync --only-group dev --locked
 
       - name: Build image
         env:
           DOCKER_IMAGE: ${{ steps.image.outputs.image }}
           DOCKER_TAG: ${{ steps.image.outputs.tag }}
+          DOCKER_CACHE_FROM: ${{ steps.cache.outputs.cache_from }}
+          DOCKER_CACHE_TO: ${{ steps.cache.outputs.cache_to }}
         run: uv run nox -s docker_build
 
       - name: Smoke test image
@@ -89,7 +187,8 @@ jobs:
   trivy_image:
     name: Security/Trivy image
     runs-on: ubuntu-24.04
-    needs: build_image
+    needs: [scan_policy, build_image]
+    if: needs.scan_policy.outputs.image_security == 'true' || needs.scan_policy.outputs.dependency_security == 'true'
     permissions:
       contents: read
       security-events: write
@@ -105,12 +204,50 @@ jobs:
       - name: Load image
         run: docker load -i image.tar
 
+      - name: Generate image SBOM
+        run: |
+          image_ref="${{ needs.build_image.outputs.image }}:${{ needs.build_image.outputs.tag }}"
+          image_id="$(docker image inspect "${image_ref}" --format '{{ .Id }}')"
+
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "${PWD}:/workspace" \
+            aquasec/trivy:0.70.0 image \
+            --timeout 20m \
+            --format cyclonedx \
+            --output /workspace/sbom.cdx.json \
+            "${image_ref}"
+
+          jq -n \
+            --arg git_sha "${{ github.sha }}" \
+            --arg image_ref "${image_ref}" \
+            --arg image_id "${image_id}" \
+            --arg sbom_format "CycloneDX JSON" \
+            --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+              git_sha: $git_sha,
+              image_ref: $image_ref,
+              image_id: $image_id,
+              sbom_format: $sbom_format,
+              generated_at: $generated_at
+            }' > sbom-metadata.json
+
+      - name: Upload image SBOM
+        uses: actions/upload-artifact@v7
+        with:
+          name: image-sbom-${{ github.sha }}
+          path: |
+            sbom.cdx.json
+            sbom-metadata.json
+          if-no-files-found: error
+
       - name: Generate Trivy image SARIF
         run: |
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "${PWD}:/workspace" \
             aquasec/trivy:0.70.0 image \
+            --timeout 20m \
             --scanners vuln \
             --ignorefile /workspace/.trivyignore.yaml \
             --severity HIGH,CRITICAL \
@@ -121,19 +258,25 @@ jobs:
 
       - name: Scan image with Trivy
         run: |
+          set +e
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "${PWD}:/workspace" \
             aquasec/trivy:0.70.0 image \
+            --timeout 20m \
             --scanners vuln \
             --ignorefile /workspace/.trivyignore.yaml \
             --severity HIGH,CRITICAL \
-            --exit-code 0 \
+            --exit-code 1 \
             --format json \
             --output /workspace/trivy-image.json \
             "${{ needs.build_image.outputs.image }}:${{ needs.build_image.outputs.tag }}"
+          trivy_status=$?
+          set -e
 
-          findings="$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-image.json)"
+          if [ ! -f trivy-image.json ]; then
+            exit "${trivy_status}"
+          fi
 
           {
             echo "## Trivy image packages to update"
@@ -164,9 +307,7 @@ jobs:
           cat trivy-image-summary.md
           cat trivy-image-summary.md >> "${GITHUB_STEP_SUMMARY}"
 
-          if [ "${findings}" -gt 0 ]; then
-            exit 1
-          fi
+          exit "${trivy_status}"
 
       - name: Upload Trivy image SARIF
         if: always()
@@ -178,7 +319,7 @@ jobs:
   trivy_fs:
     name: Security/Trivy filesystem
     runs-on: ubuntu-24.04
-    needs: trivyignore_expiry
+    needs: [scan_policy, trivyignore_expiry]
     permissions:
       contents: read
       security-events: write
@@ -187,10 +328,12 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Generate Trivy filesystem SARIF
+        if: needs.scan_policy.outputs.full_security == 'true'
         run: |
           docker run --rm \
             -v "${PWD}:/workspace" \
             aquasec/trivy:0.70.0 fs \
+            --timeout 20m \
             --scanners vuln,secret,misconfig \
             --ignorefile /workspace/.trivyignore.yaml \
             --severity HIGH,CRITICAL \
@@ -200,11 +343,13 @@ jobs:
             /workspace
 
       - name: Scan repository CVEs with Trivy
+        if: needs.scan_policy.outputs.full_security == 'true'
         run: |
           set +e
           docker run --rm \
             -v "${PWD}:/workspace" \
             aquasec/trivy:0.70.0 fs \
+            --timeout 20m \
             --scanners vuln \
             --ignorefile /workspace/.trivyignore.yaml \
             --severity HIGH,CRITICAL \
@@ -216,12 +361,28 @@ jobs:
           cat trivy-fs.txt
           exit "${status}"
 
+      - name: Generate lightweight Trivy filesystem SARIF
+        if: needs.scan_policy.outputs.full_security != 'true'
+        run: |
+          docker run --rm \
+            -v "${PWD}:/workspace" \
+            aquasec/trivy:0.70.0 fs \
+            --timeout 20m \
+            --scanners secret,misconfig \
+            --ignorefile /workspace/.trivyignore.yaml \
+            --severity HIGH,CRITICAL \
+            --exit-code 0 \
+            --format sarif \
+            --output /workspace/trivy-fs.sarif \
+            /workspace
+
       - name: Scan repository secrets and misconfigurations with Trivy
         run: |
           set +e
           docker run --rm \
             -v "${PWD}:/workspace" \
             aquasec/trivy:0.70.0 fs \
+            --timeout 20m \
             --scanners secret,misconfig \
             --ignorefile /workspace/.trivyignore.yaml \
             --severity HIGH,CRITICAL \
@@ -243,7 +404,8 @@ jobs:
   osv_scanner:
     name: Security/OSV Scanner
     runs-on: ubuntu-24.04
-    needs: trivyignore_expiry
+    needs: [scan_policy, trivyignore_expiry]
+    if: needs.scan_policy.outputs.dependency_security == 'true'
     permissions:
       contents: read
       security-events: write
@@ -271,7 +433,7 @@ jobs:
   gitleaks:
     name: Security/Gitleaks
     runs-on: ubuntu-24.04
-    needs: trivyignore_expiry
+    needs: [scan_policy, trivyignore_expiry]
     permissions:
       contents: read
       security-events: write
@@ -282,14 +444,23 @@ jobs:
           fetch-depth: 0
 
       - name: Scan Git history with Gitleaks
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          args=()
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            args+=(--log-opts "${BASE_SHA}..${HEAD_SHA}")
+          fi
+
           docker run --rm \
             -v "${PWD}:/workspace" \
             ghcr.io/gitleaks/gitleaks:v8.30.0 detect \
             --source /workspace \
             --report-format sarif \
             --report-path /workspace/gitleaks.sarif \
-            --redact
+            --redact \
+            "${args[@]}"
 
       - name: Upload Gitleaks SARIF
         if: always()
@@ -327,7 +498,7 @@ jobs:
   security_report:
     name: Security report
     runs-on: ubuntu-24.04
-    needs: [trivyignore_expiry, build_image, trivy_image, trivy_fs, osv_scanner, gitleaks, publish_image]
+    needs: [scan_policy, trivyignore_expiry, build_image, trivy_image, trivy_fs, osv_scanner, gitleaks, publish_image]
     if: always()
     steps:
       - name: Checkout
@@ -342,7 +513,11 @@ jobs:
 
           | Check | Result |
           |---|---|
+          | Full security policy | ${{ needs.scan_policy.outputs.full_security }} |
+          | Image security policy | ${{ needs.scan_policy.outputs.image_security }} |
+          | Dependency security policy | ${{ needs.scan_policy.outputs.dependency_security }} |
           | Trivy exception expiry | ${{ needs.trivyignore_expiry.result }} |
+          | Image build | ${{ needs.build_image.result }} |
           | Trivy image scan | ${{ needs.trivy_image.result }} |
           | Trivy filesystem scan | ${{ needs.trivy_fs.result }} |
           | OSV Scanner | ${{ needs.osv_scanner.result }} |
@@ -352,6 +527,7 @@ jobs:
           Image: `${{ needs.build_image.outputs.image }}:${{ needs.build_image.outputs.tag }}`
 
           Detailed findings are available in GitHub Security code scanning.
+          The image SBOM is uploaded as the `image-sbom-${{ github.sha }}` artifact.
           Trivy image package updates are printed in the Trivy image job summary.
           Trivy exceptions are documented in `trivy-exceptions.yaml`.
           EOF
@@ -366,7 +542,8 @@ jobs:
       - name: Fail on security findings
         run: |
           test "${{ needs.trivyignore_expiry.result }}" = "success"
-          test "${{ needs.trivy_image.result }}" = "success"
+          test "${{ needs.build_image.result }}" = "success" || test "${{ needs.build_image.result }}" = "skipped"
+          test "${{ needs.trivy_image.result }}" = "success" || test "${{ needs.trivy_image.result }}" = "skipped"
           test "${{ needs.trivy_fs.result }}" = "success"
-          test "${{ needs.osv_scanner.result }}" = "success"
-          test "${{ needs.gitleaks.result }}" = "success"
+          test "${{ needs.osv_scanner.result }}" = "success" || test "${{ needs.osv_scanner.result }}" = "skipped"
+          test "${{ needs.gitleaks.result }}" = "success" || test "${{ needs.gitleaks.result }}" = "skipped"

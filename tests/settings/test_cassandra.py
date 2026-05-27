@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 from typing import Any
 
 import pytest

@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 import importlib
 import shutil
 import subprocess

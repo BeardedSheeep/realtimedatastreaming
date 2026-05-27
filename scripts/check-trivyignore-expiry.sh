@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 BeardedSheeep
+
 set -euo pipefail
 
 ignore_file="${1:-.trivyignore.yaml}"

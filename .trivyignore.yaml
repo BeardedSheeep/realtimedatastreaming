@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 vulnerabilities:
   - id: CVE-2026-40356
     purls:
@@ -34,6 +36,30 @@ vulnerabilities:
       - "pkg:deb/debian/zlib1g"
     expired_at: 2026-06-20
     statement: "Temporary exception: no Debian Bookworm fixed package is published for zlib1g at the time of triage. Owner: security. Review before expiry; remove as soon as a fixed package or base image is available."
+
+  - id: CVE-2026-42496
+    purls:
+      - "pkg:deb/debian/perl-base"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: no Debian Bookworm fixed package is published for perl-base at the time of triage. Owner: security. Review before expiry; remove as soon as a fixed package or safer base image is available."
+
+  - id: CVE-2026-8376
+    purls:
+      - "pkg:deb/debian/perl-base"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: no Debian Bookworm fixed package is published for perl-base at the time of triage. Owner: security. Review before expiry; remove as soon as a fixed package or safer base image is available."
+
+  - id: CVE-2026-42497
+    purls:
+      - "pkg:deb/debian/perl-base"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: no Debian Bookworm fixed package is published for perl-base at the time of triage. Owner: security. Review before expiry; remove as soon as a fixed package or safer base image is available."
+
+  - id: CVE-2026-9538
+    purls:
+      - "pkg:deb/debian/perl-base"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: no Debian Bookworm fixed package is published for perl-base at the time of triage. Owner: security. Review before expiry; remove as soon as a fixed package or safer base image is available."
 
   - id: CVE-2025-52999
     purls:

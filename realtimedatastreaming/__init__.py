@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 from realtimedatastreaming.settings import Settings, get_settings
 
 __version__ = "0.1.0"

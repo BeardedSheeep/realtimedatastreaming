@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 import json
 import time
 from typing import Any, cast

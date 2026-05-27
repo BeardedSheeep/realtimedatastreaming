@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 import re
 from collections.abc import Mapping
 from functools import lru_cache
