@@ -1,3 +1,5 @@
+<!-- Copyright (c) 2026 BeardedSheeep -->
+
 # Realtime User Profile Quality Streaming
 
 `realtimedatastreaming` is a deliberately small real-time user profile ingestion and quality monitoring service.
@@ -51,7 +53,7 @@ The repository already contains the Python application foundation:
 - `UserCreated` and `UserProfileInvalid` profile contracts;
 - versioned Kafka JSON Schema artifacts for Schema Registry;
 - Confluent Schema Registry registration helpers with topic-value subject naming;
-- Schema Registry-aware Kafka publisher;
+- Schema Registry-aware Kafka publisher with async, single-message sync, and batch sync publishing paths;
 - optional Docker Compose integration test for Kafka and Schema Registry;
 - user profile quality rules with explicit rejection reasons;
 - privacy-safe invalid profile events with allowlisted payloads and salted source id pseudonymization;
@@ -160,6 +162,15 @@ Kafka value contracts are stored as versioned JSON Schema artifacts in
 Subjects can also be derived from configured topic names. For example, `KAFKA_USERS_CREATED_TOPIC=events.users.created` maps to the Schema Registry subject `events.users.created-value`.
 
 Pydantic models remain Python DTOs for local validation, but the JSON Schema artifacts are the Kafka-facing contracts to register with Schema Registry. Registration is handled through the official Confluent Schema Registry client in `realtimedatastreaming.ingestion.schema_registry`.
+
+Publication is implemented by `realtimedatastreaming.messaging.kafka_producer.UserProfileEventProducer`.
+It provides three publishing modes:
+
+- `publish`: asynchronous publication that queues the message locally and requires the caller to flush or close the producer before process exit;
+- `publish_sync`: single-message publication that waits for a delivery acknowledgement and raises `KafkaPublicationError` on delivery failure or missing acknowledgement;
+- `publish_batch_sync`: batch publication for short-lived jobs, producing multiple `KafkaProducerRecord` values, flushing once, and raising if any message fails, times out, or is not acknowledged.
+
+Short-lived batch or CronJob-style workloads should prefer `publish_batch_sync` for multiple messages and `publish_sync` for one-off messages. Long-running services may use `publish` when they own producer lifecycle management and call `flush` or `close` during shutdown.
 
 ### Profile Contracts And Quality
 
@@ -297,6 +308,28 @@ Release gates are:
 | Integration | manual or scheduled | Before release | real Kafka and Schema Registry publish/consume test |
 | Promotion | release approval | Yes | deploy immutable image, run smoke checks, watch SLO indicators |
 
+Base-image patching policy:
+
+- Docker base images are pinned by digest and refreshed weekly through Dependabot.
+- Trivy image scans are blocking for HIGH and CRITICAL vulnerabilities.
+- Default remediation is to refresh the pinned base-image digest, rebuild, smoke test, and rescan.
+- Fallback remediation is allowed for urgent HIGH or CRITICAL CVEs when a fixed Debian package exists but the upstream base image has not been refreshed yet.
+- Fallback OS package upgrades must pin exact package versions, stay limited to the vulnerable packages, reference the CVE or Trivy finding, and include a removal condition.
+- Generic `apt-get upgrade` and unpinned `apt-get install --only-upgrade` are not allowed because they make builds depend on repository state at build time.
+- Long-lived exceptions belong in `.trivyignore.yaml` with owner, expiry, and justification.
+
+Fallback package pinning template:
+
+```dockerfile
+# Temporary CVE remediation for CVE-XXXX.
+# Remove after the refreshed pinned base-image digest includes these fixed versions.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade \
+        openssl=3.0.20-1~deb12u1 \
+        libssl3=3.0.20-1~deb12u1 \
+    && rm -rf /var/lib/apt/lists/*
+```
+
 ### Operations
 
 Day-2 operations should be documented before the system grows:
@@ -321,6 +354,7 @@ Data loss and duplicate policy:
 - Kafka producer idempotence is enabled, but end-to-end exactly-once processing is not claimed.
 - The event key is the source user id when available.
 - Retries may produce duplicates if the caller retries after an ambiguous delivery outcome.
+- Short-lived jobs should use `publish_sync` or `publish_batch_sync` so delivery callbacks are observed before process exit.
 - Consumers must be designed to tolerate duplicate `source_user_id` events.
 - Replay is manual until a dedicated replay command exists.
 - Once Cassandra is introduced, writes must be idempotent by source id, event type, and processing timestamp/window.
@@ -437,6 +471,7 @@ The main stages are now:
 1. define the application modules under `realtimedatastreaming/`;
 2. implement ingestion and quality rules;
 3. publish and validate Kafka events;
-4. add deployment automation and release gates;
-5. add SRE runbooks, SLOs, and security controls;
-6. add Airflow, Spark, and Cassandra as staged distributed-system capabilities with explicit operational gates.
+4. optimize container image builds, image scans, and CI dependency installation;
+5. add deployment automation and release gates;
+6. add SRE runbooks, SLOs, and security controls;
+7. add Airflow, Spark, and Cassandra as staged distributed-system capabilities with explicit operational gates.

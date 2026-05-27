@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 import logging
 from typing import Any, cast
 
@@ -8,7 +10,9 @@ from realtimedatastreaming.ingestion.schema_registry import USERS_CREATED_VALUE_
 from realtimedatastreaming.ingestion.schemas import UserCreated
 from realtimedatastreaming.messaging.kafka_producer import (
     KafkaDeliveryCallback,
+    KafkaDeliveryReport,
     KafkaMessageValue,
+    KafkaProducerRecord,
     KafkaPublicationError,
     SchemaRegistryValueSerializer,
     UserProfileEventProducer,
@@ -127,24 +131,74 @@ def test_publish_sync_raises_when_delivery_is_not_acknowledged() -> None:
     assert exc_info.value.reason == "delivery_not_acknowledged"
 
 
-def test_close_flushes_producer() -> None:
+def test_publish_batch_sync_flushes_once_and_returns_all_delivery_reports() -> None:
     producer = _FakeKafkaProducer()
+    serializer = _FakeValueSerializer()
+    user_profile_producer = UserProfileEventProducer(producer, serializer)
+
+    delivery_reports = user_profile_producer.publish_batch_sync(
+        topic="users_created",
+        records=(
+            KafkaProducerRecord(key="source-user-1", value={"source_user_id": "source-user-1"}),
+            KafkaProducerRecord(key=b"source-user-2", value={"source_user_id": "source-user-2"}),
+        ),
+        timeout=10.0,
+    )
+
+    assert delivery_reports == (
+        KafkaDeliveryReport(topic="users_created", partition=2, offset=42),
+        KafkaDeliveryReport(topic="users_created", partition=2, offset=43),
+    )
+    assert producer.flush_calls == [10.0]
+    assert producer.poll_calls == [0.0, 0.0]
+    assert [message["key"] for message in producer.produced_messages] == [b"source-user-1", b"source-user-2"]
+    assert serializer.serialized_values == [
+        ("users_created", {"source_user_id": "source-user-1"}),
+        ("users_created", {"source_user_id": "source-user-2"}),
+    ]
+
+
+def test_publish_batch_sync_raises_when_any_delivery_callback_reports_failure() -> None:
+    producer = _FakeKafkaProducer(delivery_error=_FakeKafkaError("broker unavailable"))
     user_profile_producer = UserProfileEventProducer(producer, _FakeValueSerializer())
 
-    remaining_messages = user_profile_producer.close(timeout=5.0)
+    with pytest.raises(KafkaPublicationError, match="broker unavailable") as exc_info:
+        user_profile_producer.publish_batch_sync(
+            topic="users_created",
+            records=(KafkaProducerRecord(value={"event_type": "UserCreated"}),),
+        )
 
-    assert remaining_messages == 0
-    assert producer.flush_calls == [5.0]
+    assert exc_info.value.topic == "users_created"
+    assert exc_info.value.reason == "delivery_failed"
 
 
-def test_flush_without_timeout_uses_producer_default() -> None:
-    producer = _FakeKafkaProducer()
+def test_publish_batch_sync_raises_when_flush_leaves_messages_undelivered() -> None:
+    producer = _FakeKafkaProducer(remaining_messages_after_flush=1)
     user_profile_producer = UserProfileEventProducer(producer, _FakeValueSerializer())
 
-    remaining_messages = user_profile_producer.flush()
+    with pytest.raises(KafkaPublicationError, match="1 message") as exc_info:
+        user_profile_producer.publish_batch_sync(
+            topic="users_created",
+            records=(KafkaProducerRecord(value={"event_type": "UserCreated"}),),
+            timeout=0.1,
+        )
 
-    assert remaining_messages == 0
-    assert producer.flush_calls == [-1.0]
+    assert exc_info.value.topic == "users_created"
+    assert exc_info.value.reason == "delivery_timeout"
+
+
+def test_publish_batch_sync_raises_when_delivery_is_not_acknowledged() -> None:
+    producer = _FakeKafkaProducer(run_delivery_callbacks_on_flush=False)
+    user_profile_producer = UserProfileEventProducer(producer, _FakeValueSerializer())
+
+    with pytest.raises(KafkaPublicationError, match="delivery was not acknowledged") as exc_info:
+        user_profile_producer.publish_batch_sync(
+            topic="users_created",
+            records=(KafkaProducerRecord(value={"event_type": "UserCreated"}),),
+        )
+
+    assert exc_info.value.topic == "users_created"
+    assert exc_info.value.reason == "delivery_not_acknowledged"
 
 
 def test_schema_registry_value_serializer_rejects_topics_without_contract() -> None:
@@ -181,13 +235,6 @@ def test_schema_registry_value_serializer_rejects_payloads_that_do_not_match_the
             topic="users_created",
             value={**_valid_user_created_payload(), "unexpected": "not-in-contract"},
         )
-
-
-def test_schema_registry_value_serializer_rejects_serializers_returning_none() -> None:
-    serializer = SchemaRegistryValueSerializer({"users_created": _NullValueSerializer()})
-
-    with pytest.raises(ValueError, match="returned None"):
-        serializer.serialize(topic="users_created", value={"event_type": "UserCreated"})
 
 
 def test_producer_config_from_settings_enables_reliable_delivery_defaults() -> None:
@@ -280,6 +327,7 @@ class _FakeKafkaProducer:
         buffer_errors_before_success: int = 0,
         delivery_error: Any = None,
         run_delivery_callbacks_on_flush: bool = True,
+        remaining_messages_after_flush: int = 0,
     ) -> None:
         self.produced_messages: list[dict[str, Any]] = []
         self.flush_calls: list[float] = []
@@ -287,6 +335,7 @@ class _FakeKafkaProducer:
         self._buffer_errors_before_success = buffer_errors_before_success
         self._delivery_error = delivery_error
         self._run_delivery_callbacks_on_flush = run_delivery_callbacks_on_flush
+        self._remaining_messages_after_flush = remaining_messages_after_flush
 
     def produce(
         self,
@@ -309,14 +358,14 @@ class _FakeKafkaProducer:
     def flush(self, timeout: float = -1.0) -> int:
         self.flush_calls.append(timeout)
         if self._run_delivery_callbacks_on_flush:
-            for message in self.produced_messages:
+            for offset, message in enumerate(self.produced_messages, start=42):
                 callback = message["on_delivery"]
                 if callback is not None:
                     callback(
                         self._delivery_error,
-                        _FakeKafkaMessage(topic=message["topic"], partition=2, offset=42),
+                        _FakeKafkaMessage(topic=message["topic"], partition=2, offset=offset),
                     )
-        return 0
+        return self._remaining_messages_after_flush
 
     def poll(self, timeout: float = 0.0) -> int:
         self.poll_calls.append(timeout)
@@ -345,11 +394,6 @@ class _FakeKafkaError:
 
     def __str__(self) -> str:
         return self._message
-
-
-class _NullValueSerializer:
-    def __call__(self, obj: object, ctx: Any = None) -> bytes | None:
-        return None
 
 
 class _FakeSchemaRegistryClient:

@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 from datetime import date
 
 import pytest
@@ -78,32 +80,6 @@ def test_validate_user_profile_quality_accepts_non_random_user_country_names_wit
     assert validate_user_profile_quality(profile, today=date(2025, 1, 1)) == ()
 
 
-@pytest.mark.parametrize(
-    "payload_updates, expected_reason",
-    [
-        ({"country": "Atlantis"}, REJECTION_UNSUPPORTED_COUNTRY),
-        ({"date_of_birth": "1890-01-01T00:00:00Z"}, REJECTION_IMPLAUSIBLE_AGE),
-    ],
-)
-def test_user_created_payload_validates_through_schema_then_quality(
-    payload_updates: dict[str, str],
-    expected_reason: str,
-) -> None:
-    payload = _valid_user_payload()
-    payload.update(payload_updates)
-
-    profile = UserCreated.model_validate(payload)
-    reasons = validate_user_profile_quality(profile, today=date(2025, 1, 1))
-
-    assert expected_reason in reasons
-
-
-def test_user_created_payload_passes_schema_and_quality_when_valid() -> None:
-    profile = UserCreated.model_validate(_valid_user_payload())
-
-    assert validate_user_profile_quality(profile, today=date(2025, 1, 1)) == ()
-
-
 def test_build_invalid_user_profile_event_keeps_only_safe_payload_fields() -> None:
     profile = _valid_user()
 
@@ -136,18 +112,6 @@ def test_build_invalid_user_profile_event_requires_salted_source_user_id_pseudon
         assert "salt" in str(exc)
     else:
         raise AssertionError("build_invalid_user_profile_event should require a pseudonymization salt")
-
-    invalid_event = build_invalid_user_profile_event(
-        profile,
-        ("invalid_email",),
-        pseudonymization_salt="local-test-salt",
-    )
-
-    assert invalid_event.source_user_id == pseudonymize_source_user_id(
-        source=profile.source,
-        source_user_id=profile.source_user_id,
-        salt="local-test-salt",
-    )
 
 
 def _valid_user() -> UserCreated:

@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 from __future__ import annotations
 
 from dataclasses import dataclass

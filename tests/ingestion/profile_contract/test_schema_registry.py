@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 import json
 from typing import Any, cast
 

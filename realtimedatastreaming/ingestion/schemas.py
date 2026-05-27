@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 from datetime import datetime
 from typing import Any, Literal
 

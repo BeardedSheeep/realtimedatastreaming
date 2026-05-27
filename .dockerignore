@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 .git
 .github
 .mypy_cache
@@ -5,6 +7,8 @@
 .pytest_cache
 .ruff_cache
 .venv
+.DS_Store
+.coverage
 __pycache__
 *.py[cod]
 
@@ -12,12 +16,17 @@ build
 dist
 htmlcov
 site
+security-reports
 
 .env
 .env.*
 !.env.example
 
+coverage.xml
+image.tar
+*.db
 *.log
 *.pid
+*.sqlite
 tmp
 temp

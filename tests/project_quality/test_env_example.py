@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 from pathlib import Path
 
 from realtimedatastreaming.settings import Settings

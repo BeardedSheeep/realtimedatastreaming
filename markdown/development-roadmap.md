@@ -1,3 +1,5 @@
+<!-- Copyright (c) 2026 BeardedSheeep -->
+
 # Development Roadmap
 
 This roadmap intentionally keeps the functional product small and moves the ambition to delivery, operations, SRE, and security.
@@ -141,9 +143,10 @@ Actions:
 3. Use topic-value subject naming, including configured topic names.
 4. Configure reliable producer defaults: idempotence, `acks=all`, retries, timeouts, compression, and client id.
 5. Handle local producer backpressure.
-6. Provide async publish and sync publish paths.
-7. Surface delivery failures as application errors when sync publishing is used.
-8. Keep producer unit tests and contract tests.
+6. Provide async publish, single-message sync publish, and batch sync publish paths.
+7. Surface delivery failures as application errors when sync or batch sync publishing is used.
+8. Use batch sync publishing for short-lived ingestion jobs so delivery callbacks are observed before process exit.
+9. Keep producer unit tests and contract tests.
 
 Deliverables:
 
@@ -153,7 +156,32 @@ Deliverables:
 - unit tests;
 - real Kafka/Schema Registry integration test.
 
-## Step 5 - Airflow Orchestration
+## Step 5 - Container Image And CI Build Optimization
+
+Goal: keep Docker builds, image scans, and quality gates fast enough before heavier Airflow, Spark, and Cassandra runtimes are introduced.
+
+Actions:
+
+1. Reorder the application `Dockerfile` so dependency installation is cached separately from application code changes.
+2. Add BuildKit cache mounts for `uv` during Docker builds.
+3. Keep `nox` sessions scoped so routine format, lint, typing, and unit-test lanes do not install heavy optional runtime profiles unless required.
+4. Add registry-backed Docker build cache for CI builds.
+5. Define a differentiated scan policy: fast scans for normal application PRs, full image scans when dependency or image inputs change, and scheduled full scans.
+6. Add a stronger image smoke test that validates critical runtime imports and profile-specific entrypoints.
+7. Introduce a prebuilt heavy-dependencies base image only when Spark, Airflow, or Cassandra runtimes become part of an executable image.
+8. Produce an SBOM for published images.
+
+Deliverables:
+
+- Dockerfile cache-layer optimization;
+- BuildKit `uv` cache usage;
+- scoped `nox` dependency installation strategy;
+- CI registry cache configuration;
+- image scan policy;
+- image smoke tests;
+- SBOM artifact for released images.
+
+## Step 6 - Airflow Orchestration
 
 Goal: make Airflow the pipeline orchestrator once the ingestion path has more than one operational step.
 
@@ -175,7 +203,7 @@ Deliverables:
 - Airflow connection and secret handling notes;
 - failed DAG runbook.
 
-## Step 6 - Spark Streaming
+## Step 7 - Spark Streaming
 
 Goal: validate, enrich, and route Kafka events through a distributed stream-processing layer.
 
@@ -199,7 +227,7 @@ Deliverables:
 - schema compatibility tests;
 - stuck or failing streaming job runbook.
 
-## Step 7 - Integration Testing
+## Step 8 - Integration Testing
 
 Status: implemented as an optional test lane.
 
@@ -221,7 +249,7 @@ Deliverables:
 - `nox -s integration`;
 - end-to-end messaging test.
 
-## Step 8 - CI/CD Baseline
+## Step 9 - CI/CD Baseline
 
 Goal: encode the release process instead of documenting manual rituals.
 
@@ -252,7 +280,7 @@ Deliverables:
 - optional integration workflow;
 - documented release gate list.
 
-## Step 9 - Release Automation And Documentation Publishing
+## Step 10 - Release Automation And Documentation Publishing
 
 Goal: make each promoted version traceable, documented, and easy to consume.
 
@@ -287,7 +315,7 @@ Deliverables:
 - documentation publishing workflow;
 - release artifact checklist.
 
-## Step 10 - Deployment Model
+## Step 11 - Deployment Model
 
 Goal: deploy the small service using a professional, repeatable path.
 
@@ -333,7 +361,7 @@ Target platform progression:
 | 3 | Airflow + Kafka + Spark | distributed validation and enrichment |
 | 4 | Airflow + Kafka + Spark + Cassandra | queryable profiles and quality views |
 
-## Step 11 - SRE And Observability
+## Step 12 - SRE And Observability
 
 Goal: make the service diagnosable and govern releases with operational signals.
 
@@ -366,7 +394,7 @@ Deliverables:
 - alerting policy;
 - post-release verification checklist.
 
-## Step 12 - Runbooks And Day-2 Operations
+## Step 13 - Runbooks And Day-2 Operations
 
 Goal: make common operations repeatable and auditable.
 
@@ -405,7 +433,7 @@ Deliverables:
 - rollback checklist;
 - patching cadence.
 
-## Step 13 - Continuous Security
+## Step 14 - Continuous Security
 
 Goal: make security checks part of delivery and operations.
 
@@ -440,7 +468,7 @@ Deliverables:
 - security exception policy;
 - production hardening checklist.
 
-## Step 14 - Cassandra Persistence
+## Step 15 - Cassandra Persistence
 
 Goal: persist queryable profiles and quality monitoring views from concrete access patterns.
 

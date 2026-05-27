@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field

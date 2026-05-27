@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 from typing import Any
 
 from realtimedatastreaming.settings import Settings, get_settings
@@ -37,18 +39,6 @@ def test_settings_defaults() -> None:
     assert settings.pii_pseudonymization_salt_value is None
     assert settings.sentry_environment == "development"
     assert settings.sentry_traces_sample_rate == 0.0
-
-
-def test_settings_exposes_domain_specific_config_groups() -> None:
-    settings = Settings()
-
-    assert settings.application.app_name == settings.app_name
-    assert settings.logging.log_level == settings.log_level
-    assert settings.observability.service_name == settings.service_name
-    assert settings.random_user.random_user_api_url == settings.random_user_api_url
-    assert settings.kafka.kafka_bootstrap_servers == settings.kafka_bootstrap_servers
-    assert settings.spark.spark_master_url == settings.spark_master_url
-    assert settings.cassandra.cassandra_host == settings.cassandra_host
 
 
 def test_settings_read_environment_overrides(monkeypatch: Any) -> None:

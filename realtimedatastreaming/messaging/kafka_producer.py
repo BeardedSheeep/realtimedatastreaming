@@ -1,3 +1,5 @@
+# Copyright (c) 2026 BeardedSheeep
+
 from __future__ import annotations
 
 import logging
@@ -39,6 +41,12 @@ class KafkaDeliveryReport:
     topic: str
     partition: int
     offset: int
+
+
+@dataclass(frozen=True, slots=True)
+class KafkaProducerRecord:
+    value: KafkaMessageValue
+    key: str | bytes | None = None
 
 
 class KafkaProducerProtocol(Protocol):
@@ -199,6 +207,45 @@ class UserProfileEventProducer:
             msg = f"Kafka publication delivery was not acknowledged for topic {topic}"
             raise KafkaPublicationError(msg, topic=topic, reason="delivery_not_acknowledged")
         return delivery_report
+
+    def publish_batch_sync(
+        self,
+        *,
+        topic: str,
+        records: list[KafkaProducerRecord] | tuple[KafkaProducerRecord, ...],
+        timeout: float | None = None,
+    ) -> tuple[KafkaDeliveryReport, ...]:
+        delivery_errors: list[KafkaError] = []
+        delivery_reports: list[KafkaDeliveryReport] = []
+
+        def capture_delivery_result(error: KafkaError | None, message: Message) -> None:
+            if error is not None:
+                delivery_errors.append(error)
+                return
+            delivered_topic = message.topic()
+            partition = message.partition()
+            offset = message.offset()
+            if delivered_topic is None or partition is None or offset is None:
+                return
+            delivery_reports.append(KafkaDeliveryReport(topic=delivered_topic, partition=partition, offset=offset))
+
+        for record in records:
+            self.publish(topic=topic, value=record.value, key=record.key, on_delivery=capture_delivery_result)
+
+        remaining_messages = self.flush(timeout)
+        if remaining_messages:
+            msg = f"Kafka publication flush timed out for topic {topic}: {remaining_messages} message(s) not delivered"
+            raise KafkaPublicationError(msg, topic=topic, reason="delivery_timeout")
+
+        if delivery_errors:
+            msg = f"Kafka publication failed for topic {topic}: {delivery_errors[0]}"
+            raise KafkaPublicationError(msg, topic=topic, reason="delivery_failed")
+
+        if len(delivery_reports) != len(records):
+            msg = f"Kafka publication delivery was not acknowledged for topic {topic}"
+            raise KafkaPublicationError(msg, topic=topic, reason="delivery_not_acknowledged")
+
+        return tuple(delivery_reports)
 
     def flush(self, timeout: float | None = None) -> int:
         if timeout is None:
