@@ -316,7 +316,7 @@ Base-image patching policy:
 - Fallback remediation is allowed for urgent HIGH or CRITICAL CVEs when a fixed Debian package exists but the upstream base image has not been refreshed yet.
 - Fallback OS package upgrades must pin exact package versions, stay limited to the vulnerable packages, reference the CVE or Trivy finding, and include a removal condition.
 - Generic `apt-get upgrade` and unpinned `apt-get install --only-upgrade` are not allowed because they make builds depend on repository state at build time.
-- Long-lived exceptions belong in `.trivyignore.yaml` with owner, expiry, and justification.
+- Vulnerabilities without a published Debian Bookworm fixed package, such as the temporary `perl-base` exception for `CVE-2026-48962`, belong in `.trivyignore.yaml` with owner, expiry, impact-specific justification, and a clear removal condition.
 
 Fallback package pinning template:
 

@@ -61,6 +61,12 @@ vulnerabilities:
     expired_at: 2026-06-20
     statement: "Temporary exception: no Debian Bookworm fixed package is published for perl-base at the time of triage. Owner: security. Review before expiry; remove as soon as a fixed package or safer base image is available."
 
+  - id: CVE-2026-48962
+    purls:
+      - "pkg:deb/debian/perl-base"
+    expired_at: 2026-06-20
+    statement: "Temporary exception: no Debian Bookworm fixed package is published for perl-base at the time of triage. Owner: security. Review runtime exposure to attacker-controlled IO::Compress output globs before renewal; remove as soon as a fixed package or safer base image is available."
+
   - id: CVE-2025-52999
     purls:
       - "pkg:maven/com.fasterxml.jackson.core/jackson-core"

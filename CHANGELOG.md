@@ -30,6 +30,7 @@
 - Required `PII_PSEUDONYMIZATION_SALT` outside `development`.
 - Added CI image quality checks with Trivy ignore expiry validation before Docker image scanning.
 - Added pinned runtime package upgrades for Trivy-reported Debian HIGH and CRITICAL CVEs in `libcap2`, `libgnutls30`, `libssl3`, and `openssl`.
+- Added a temporary Trivy exception for `perl-base` `CVE-2026-48962` while no Debian Bookworm fixed package is published.
 
 ### Changed
 
