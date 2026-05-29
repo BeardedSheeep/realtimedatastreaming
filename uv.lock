@@ -1051,7 +1051,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "nox", extras = ["uv"], specifier = ">=2025.5.1" },
+    { name = "nox", extras = ["uv"], specifier = ">=2026.4.10" },
     { name = "pip-audit", specifier = ">=2.7.0" },
     { name = "pre-commit", specifier = ">=4.0.0" },
 ]
@@ -1059,7 +1059,7 @@ format = [{ name = "ruff", specifier = ">=0.9.0" }]
 lint = [{ name = "ruff", specifier = ">=0.9.0" }]
 test = [
     { name = "coverage", extras = ["toml"], specifier = ">=7.0.0" },
-    { name = "nox", extras = ["uv"], specifier = ">=2025.5.1" },
+    { name = "nox", extras = ["uv"], specifier = ">=2026.4.10" },
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-cov", specifier = ">=5.0.0" },
     { name = "pytest-mock", specifier = ">=3.12.0" },
