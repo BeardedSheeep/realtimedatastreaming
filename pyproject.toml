@@ -64,7 +64,7 @@ typing = [
     "typing-extensions>=4.12.0",
 ]
 test = [
-    "coverage[toml]>=7.0.0",
+    "coverage[toml]>=7.14.1",
     "nox[uv]>=2025.5.1",
     "PyYAML>=6.0.0",
     "pytest>=8.0.0",
