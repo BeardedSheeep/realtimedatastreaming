@@ -136,7 +136,7 @@ jobs:
 
       - name: Log in to GHCR for build cache
         if: steps.cache.outputs.cache_from != '' || steps.cache.outputs.cache_to != ''
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
