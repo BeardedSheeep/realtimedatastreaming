@@ -53,14 +53,12 @@ def test_tracked_yaml_and_toml_configs_parse() -> None:
             tomllib.loads(path.read_text())
 
 
-def test_dependabot_covers_repo_dockerfile_and_github_actions() -> None:
+def test_dependabot_is_limited_to_python_dependencies() -> None:
     dependabot = yaml.safe_load(Path(".github/dependabot.yml").read_text())
 
     ecosystems = {update["package-ecosystem"]: update["directory"] for update in dependabot["updates"]}
 
-    assert ecosystems["uv"] == "/"
-    assert ecosystems["docker"] == "/"
-    assert ecosystems["github-actions"] == "/"
+    assert ecosystems == {"uv": "/"}
 
 
 def test_github_workflows_are_registered_with_expected_triggers() -> None:
@@ -70,8 +68,9 @@ def test_github_workflows_are_registered_with_expected_triggers() -> None:
     cicd_triggers = cicd[True]
     quality_triggers = quality[True]
 
-    assert "pull_request" in cicd_triggers
-    assert "push" in cicd_triggers
+    assert "pull_request" not in cicd_triggers
+    assert "workflow_dispatch" in cicd_triggers
+    assert cicd_triggers["push"]["branches"] == ["main"]
     assert "workflow_call" in quality_triggers
     assert quality["jobs"]["actionlint"]["steps"][1]["uses"].startswith("devops-actions/actionlint@")
 
