@@ -54,10 +54,10 @@ dev = [
     "pre-commit>=4.0.0",
 ]
 format = [
-    "ruff>=0.9.0",
+    "ruff>=0.15.15",
 ]
 lint = [
-    "ruff>=0.9.0",
+    "ruff>=0.15.15",
 ]
 typing = [
     "mypy>=1.13.0",
