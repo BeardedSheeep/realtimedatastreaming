@@ -14,9 +14,11 @@ from realtimedatastreaming.ingestion.schema_registry import (
     USERS_CREATED_VALUE_SUBJECT,
     kafka_value_contracts_for_topics,
     register_kafka_value_contracts,
+    schema_registry_config_from_settings,
     value_subject_for_topic,
 )
 from realtimedatastreaming.ingestion.schemas import UserCreated, UserProfileInvalid
+from realtimedatastreaming.settings import Settings
 
 
 def test_schema_registry_uses_topic_value_subject_naming() -> None:
@@ -134,6 +136,23 @@ def test_register_kafka_value_contracts_derives_subjects_from_configured_topics(
         "events.users.created-value",
         "events.users.created.invalid-value",
     ]
+
+
+def test_schema_registry_config_from_settings_adds_optional_auth_and_tls() -> None:
+    settings = Settings(
+        SCHEMA_REGISTRY_URL="https://schema-registry.example",
+        SCHEMA_REGISTRY_BASIC_AUTH_USER_INFO="api-key:api-secret",
+        SCHEMA_REGISTRY_SSL_CA_LOCATION="/etc/ssl/schema-registry-ca.pem",
+    )
+
+    config = schema_registry_config_from_settings(settings)
+
+    assert config == {
+        "url": "https://schema-registry.example/",
+        "basic.auth.credentials.source": "USER_INFO",
+        "basic.auth.user.info": "api-key:api-secret",
+        "ssl.ca.location": "/etc/ssl/schema-registry-ca.pem",
+    }
 
 
 def _load_contract_schema(schema_text: str) -> dict[str, Any]:

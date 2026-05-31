@@ -1,6 +1,54 @@
 # Copyright (c) 2026 BeardedSheeep
 
+x-airflow-common: &airflow-common
+  build:
+    context: ..
+    dockerfile: realtimedatastreaming/orchestration/Dockerfile.airflow
+  environment: &airflow-common-env
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/project/realtimedatastreaming/orchestration
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__STORE_SERIALIZED_DAGS: "true"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_POSTGRES_USER:-airflow}:${AIRFLOW_POSTGRES_PASSWORD:-local-dev-only-airflow-postgres-password}@postgres/${AIRFLOW_POSTGRES_DB:-airflow}
+    AIRFLOW__LOGGING__LOGGING_LEVEL: INFO
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "false"
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_WEBSERVER_SECRET_KEY:-local-dev-only-airflow-webserver-secret-key}
+    APP_ENV: development
+    KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    KAFKA_USERS_CREATED_TOPIC: users_created
+    KAFKA_USERS_CREATED_INVALID_TOPIC: users_created_invalid
+    LOG_FORMAT: json
+    PYTHONPATH: /opt/airflow/project
+    SCHEMA_REGISTRY_URL: http://schema-registry:8081
+  volumes:
+    - ..:/opt/airflow/project
+    - airflow_logs:/opt/airflow/logs
+  depends_on:
+    postgres:
+      condition: service_healthy
+    kafka:
+      condition: service_healthy
+    schema-registry:
+      condition: service_healthy
+
 services:
+  postgres:
+    image: postgres:16.6-bookworm
+    profiles: ["airflow"]
+    ports:
+      - "15432:5432"
+    environment:
+      POSTGRES_USER: ${AIRFLOW_POSTGRES_USER:-airflow}
+      POSTGRES_PASSWORD: ${AIRFLOW_POSTGRES_PASSWORD:-local-dev-only-airflow-postgres-password}
+      POSTGRES_DB: ${AIRFLOW_POSTGRES_DB:-airflow}
+    volumes:
+      - airflow_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
   kafka:
     image: confluentinc/cp-kafka:7.8.0
     ports:
@@ -21,7 +69,7 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     healthcheck:
-      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:19092", "--list"]
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:29092", "--list"]
       interval: 5s
       timeout: 10s
       retries: 24
@@ -42,3 +90,47 @@ services:
       interval: 5s
       timeout: 10s
       retries: 24
+
+  airflow-init:
+    <<: *airflow-common
+    profiles: ["airflow"]
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username "${AIRFLOW_ADMIN_USERNAME:-airflow}" \
+          --password "${AIRFLOW_ADMIN_PASSWORD:-local-dev-only-airflow-admin-password}" \
+          --firstname "${AIRFLOW_ADMIN_FIRSTNAME:-Local}" \
+          --lastname "${AIRFLOW_ADMIN_LASTNAME:-Admin}" \
+          --role Admin \
+          --email "${AIRFLOW_ADMIN_EMAIL:-airflow@example.com}" || true
+    restart: "no"
+
+  airflow-webserver:
+    <<: *airflow-common
+    profiles: ["airflow"]
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    ports:
+      - "8080:8080"
+    command: webserver
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+
+  airflow-scheduler:
+    <<: *airflow-common
+    profiles: ["airflow"]
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    command: scheduler
+
+volumes:
+  airflow_logs:
+  airflow_postgres:

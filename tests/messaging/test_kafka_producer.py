@@ -17,7 +17,6 @@ from realtimedatastreaming.messaging.kafka_producer import (
     SchemaRegistryValueSerializer,
     UserProfileEventProducer,
     _producer_config_from_settings,
-    _schema_registry_config_from_settings,
 )
 from realtimedatastreaming.settings import Settings
 
@@ -263,23 +262,6 @@ def test_producer_config_from_settings_adds_sasl_when_credentials_are_configured
     assert config["sasl.mechanisms"] == "PLAIN"
     assert config["sasl.username"] == "stream-user"
     assert config["sasl.password"] == "stream-password"
-
-
-def test_schema_registry_config_from_settings_adds_optional_auth_and_tls() -> None:
-    settings = Settings(
-        SCHEMA_REGISTRY_URL="https://schema-registry.example",
-        SCHEMA_REGISTRY_BASIC_AUTH_USER_INFO="api-key:api-secret",
-        SCHEMA_REGISTRY_SSL_CA_LOCATION="/etc/ssl/schema-registry-ca.pem",
-    )
-
-    config = _schema_registry_config_from_settings(settings)
-
-    assert config == {
-        "url": "https://schema-registry.example/",
-        "basic.auth.credentials.source": "USER_INFO",
-        "basic.auth.user.info": "api-key:api-secret",
-        "ssl.ca.location": "/etc/ssl/schema-registry-ca.pem",
-    }
 
 
 def test_default_delivery_callback_logs_success(caplog: Any) -> None:

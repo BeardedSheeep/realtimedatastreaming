@@ -44,6 +44,9 @@ REQUIRED_SECURITY_PACKAGE_PINS = {
     "openssl": "3.0.19-1~deb12u2",
 }
 
+AIRFLOW_DOCKERFILE = Path("realtimedatastreaming/orchestration/Dockerfile.airflow")
+INTEGRATION_COMPOSE_FILE = Path("realtimedatastreaming/docker-compose.integration.yml")
+
 
 def test_tracked_yaml_and_toml_configs_parse() -> None:
     for path in _tracked_files():
@@ -84,6 +87,183 @@ def test_dockerfile_exposes_required_oci_labels() -> None:
 
     for label in REQUIRED_OCI_LABELS:
         assert label in dockerfile
+
+
+def test_airflow_dockerfile_keeps_airflow_runtime_separate_from_application_image() -> None:
+    dockerfile = AIRFLOW_DOCKERFILE.read_text()
+    app_dockerfile = Path("Dockerfile").read_text()
+
+    assert "FROM apache/airflow:2.10.5-python3.12" in dockerfile
+    assert "pip install --no-cache-dir ." in dockerfile
+    assert "apache/airflow" not in app_dockerfile
+
+
+def test_integration_compose_includes_airflow_and_existing_runtime_services() -> None:
+    compose = yaml.safe_load(INTEGRATION_COMPOSE_FILE.read_text())
+    services = compose["services"]
+
+    assert {
+        "postgres",
+        "kafka",
+        "schema-registry",
+        "airflow-init",
+        "airflow-webserver",
+        "airflow-scheduler",
+    }.issubset(services)
+    assert services["postgres"]["profiles"] == ["airflow"]
+    assert services["airflow-init"]["profiles"] == ["airflow"]
+    assert services["airflow-webserver"]["profiles"] == ["airflow"]
+    assert services["airflow-scheduler"]["profiles"] == ["airflow"]
+    assert services["airflow-webserver"]["ports"] == ["8080:8080"]
+    assert services["kafka"]["ports"] == ["19092:19092"]
+    assert services["schema-registry"]["ports"] == ["18081:8081"]
+
+
+def test_integration_compose_configures_airflow_dag_folder_and_runtime_environment() -> None:
+    compose = yaml.safe_load(INTEGRATION_COMPOSE_FILE.read_text())
+    airflow_common = compose["x-airflow-common"]
+    airflow_environment = airflow_common["environment"]
+
+    assert airflow_common["build"] == {
+        "context": "..",
+        "dockerfile": "realtimedatastreaming/orchestration/Dockerfile.airflow",
+    }
+    assert airflow_environment["AIRFLOW__CORE__DAGS_FOLDER"] == (
+        "/opt/airflow/project/realtimedatastreaming/orchestration"
+    )
+    assert airflow_environment["PYTHONPATH"] == "/opt/airflow/project"
+    assert airflow_environment["KAFKA_BOOTSTRAP_SERVERS"] == "kafka:29092"
+    assert airflow_environment["SCHEMA_REGISTRY_URL"] == "http://schema-registry:8081"
+    assert airflow_environment["AIRFLOW__DATABASE__SQL_ALCHEMY_CONN"] == (
+        "postgresql+psycopg2://${AIRFLOW_POSTGRES_USER:-airflow}:"
+        "${AIRFLOW_POSTGRES_PASSWORD:-local-dev-only-airflow-postgres-password}@postgres/"
+        "${AIRFLOW_POSTGRES_DB:-airflow}"
+    )
+    assert airflow_environment["AIRFLOW__WEBSERVER__SECRET_KEY"] == (
+        "${AIRFLOW_WEBSERVER_SECRET_KEY:-local-dev-only-airflow-webserver-secret-key}"
+    )
+    assert "KAFKA_SASL_PASSWORD" not in airflow_environment
+    assert "PII_PSEUDONYMIZATION_SALT" not in airflow_environment
+
+
+def test_integration_compose_checks_kafka_health_on_internal_listener() -> None:
+    compose = yaml.safe_load(INTEGRATION_COMPOSE_FILE.read_text())
+    kafka_healthcheck = compose["services"]["kafka"]["healthcheck"]["test"]
+
+    assert kafka_healthcheck == ["CMD", "kafka-topics", "--bootstrap-server", "localhost:29092", "--list"]
+
+
+def test_integration_compose_reads_local_airflow_credentials_from_environment() -> None:
+    compose_text = INTEGRATION_COMPOSE_FILE.read_text()
+
+    assert "POSTGRES_PASSWORD: ${AIRFLOW_POSTGRES_PASSWORD:-local-dev-only-airflow-postgres-password}" in compose_text
+    assert '--password "${AIRFLOW_ADMIN_PASSWORD:-local-dev-only-airflow-admin-password}"' in compose_text
+    assert "local-airflow-development-secret-key" not in compose_text
+    assert "POSTGRES_PASSWORD: airflow" not in compose_text
+    assert "--password airflow" not in compose_text
+
+
+def test_nox_airflow_integration_commands_target_airflow_profile() -> None:
+    compose_file = Path("realtimedatastreaming/docker-compose.integration.yml")
+
+    assert noxfile.airflow_webserver_health_command(compose_file) == [
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "--profile",
+        "airflow",
+        "exec",
+        "-T",
+        "airflow-webserver",
+        "curl",
+        "-fsS",
+        "http://localhost:8080/health",
+    ]
+    assert noxfile.airflow_cli_command(compose_file, "dags", "list", "--output", "json") == [
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "--profile",
+        "airflow",
+        "exec",
+        "-T",
+        "airflow-scheduler",
+        "airflow",
+        "dags",
+        "list",
+        "--output",
+        "json",
+    ]
+
+
+def test_nox_kafka_integration_commands_target_default_integration_stack() -> None:
+    compose_file = Path("realtimedatastreaming/docker-compose.integration.yml")
+
+    assert noxfile.kafka_topics_command(compose_file) == [
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "exec",
+        "-T",
+        "kafka",
+        "kafka-topics",
+        "--bootstrap-server",
+        "localhost:29092",
+        "--list",
+    ]
+    assert noxfile.schema_registry_subjects_command(compose_file) == [
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "exec",
+        "-T",
+        "schema-registry",
+        "curl",
+        "-fsS",
+        "http://localhost:8081/subjects",
+    ]
+
+
+def test_nox_airflow_json_parser_tolerates_cli_warnings() -> None:
+    assert noxfile._parse_json_from_command_output('[{"dag_id":"demo"}]') == [{"dag_id": "demo"}]
+    assert noxfile._parse_json_from_command_output('WARNING: deprecated\n[{"dag_id":"demo"}]') == [{"dag_id": "demo"}]
+    assert noxfile._parse_json_from_command_output('[{"dag_id":"demo"}]\nWARNING: deprecated') == [{"dag_id": "demo"}]
+
+
+def test_nox_airflow_json_parser_rejects_output_without_json() -> None:
+    with pytest.raises(ValueError, match="did not contain"):
+        noxfile._parse_json_from_command_output("WARNING: deprecated\nno json here")
+
+
+def test_airflow_integration_session_is_documented() -> None:
+    readme = Path("README.md").read_text()
+    airflow_doc = Path("markdown/airflow.md").read_text()
+
+    assert "uv run nox -s airflow-integration" in readme
+    assert "uv run nox -s airflow-integration" in airflow_doc
+    assert "uv run nox -s integration" in airflow_doc
+
+
+def test_nox_integration_session_aggregates_runtime_integration_sessions() -> None:
+    noxfile_text = Path("noxfile.py").read_text()
+    readme = Path("README.md").read_text()
+
+    assert 'session.notify("kafka-integration")' in noxfile_text
+    assert 'session.notify("airflow-integration")' in noxfile_text
+    assert '@nox.session(name="kafka-integration", python=PYTHON_VERSION)' in noxfile_text
+    assert '@nox.session(name="airflow-integration", venv_backend="none")' in noxfile_text
+    assert "uv run nox -s kafka-integration" in readme
+
+
+def test_kafka_integration_session_is_documented_as_runtime_contract_test() -> None:
+    readme = Path("README.md").read_text()
+
+    assert "Use `kafka-integration` to start Kafka and Schema Registry" in readme
+    assert "produce/consume and Schema Registry contract tests" in readme
 
 
 def test_nox_builds_plain_docker_command_with_oci_metadata(monkeypatch: pytest.MonkeyPatch) -> None:

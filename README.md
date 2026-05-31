@@ -99,7 +99,8 @@ The core domain is user profile ingestion quality:
 
 ### Execution Model
 
-The first execution model is a small Python ingestion job. It calls application code responsible for fetching, normalizing, validating, and publishing user profile events.
+The first execution model is a small Python ingestion job. It will call application code responsible for fetching, normalizing, validating, and publishing user profile events.
+The current Airflow DAG is an orchestration scaffold: it validates the runtime path and reserves the ingestion task, but the Random User API ingestion is not plugged into the DAG yet.
 
 Scheduling starts with Kubernetes CronJob for a production-shaped MVP. Airflow is still part of the target platform and should take over when the pipeline has multiple tasks, backfills, retries, dataset dependencies, and operational ownership needs.
 
@@ -208,6 +209,7 @@ Invalid events are intentionally privacy-reduced:
 ### Processing
 
 Processing is intentionally minimal in the first deployable slice. The ingestion job validates profiles before publishing and routes invalid profiles to the invalid-events topic.
+The Airflow DAG does not execute this ingestion slice yet; it will be connected after the ingestion job entrypoint is ready. Spark, Cassandra persistence, enrichment, and dashboards remain later stages.
 
 Implemented quality rules currently cover:
 
@@ -241,11 +243,20 @@ Its schema must be designed from query patterns rather than copied from source J
 |---|---|---:|
 | Kafka broker | Event bus | `19092` locally / platform-managed in envs |
 | Schema Registry | Kafka value contract registry | `18081` locally / platform-managed in envs |
-| Airflow | Pipeline orchestration and backfills | future local stack |
+| Airflow | Pipeline orchestration and backfills | `8080` locally / platform-managed in envs |
 | Spark | Distributed stream processing | future local stack |
 | Cassandra | Queryable profile and quality views | future local stack |
 
 Local services should be added in phases: Kafka and Schema Registry first, then Airflow, then Spark, then Cassandra, with healthchecks and runbooks at each step.
+
+Start the local Kafka, Schema Registry, and Airflow integration stack with:
+
+```bash
+docker compose -f realtimedatastreaming/docker-compose.integration.yml --profile airflow up --build
+```
+
+Then open `http://localhost:8080` and sign in with `airflow` / `airflow`.
+Kafka remains available on `localhost:19092`, and Schema Registry remains available on `localhost:18081`.
 
 ## Delivery And SRE Target
 
@@ -420,11 +431,16 @@ Install the pre-commit hook:
 uv run nox -s dev
 ```
 
+The pre-commit hook runs secret scanning plus `format`, `lint`, `typing`, and `test`. It does not run
+Kafka or Airflow integration sessions; use `uv run nox` or `uv run nox -s integration` for those.
+
 Run all checks:
 
 ```bash
 uv run nox
 ```
+
+The default nox run includes the integration lane, so Docker must be running before this command.
 
 Run a specific check:
 
@@ -434,11 +450,21 @@ uv run nox -s lint
 uv run nox -s typing
 uv run nox -s test
 uv run nox -s integration
+uv run nox -s kafka-integration
+uv run nox -s airflow-integration
 uv run nox -s audit
 ```
 
-The integration session is optional and starts the Kafka and Schema Registry
-stack defined in `realtimedatastreaming/docker-compose.integration.yml`.
+The `integration` session aggregates the integration sessions for each runtime brick and is part of the
+default `uv run nox` lane.
+Use `kafka-integration` to start Kafka and Schema Registry, wait for runtime health, run the real
+produce/consume and Schema Registry contract tests, then tear the stack down. This test does not call
+the Random User API and does not run the ingestion job. Use `airflow-integration` to build and start the
+Airflow profile, check Airflow health, validate DAG import, run `airflow dags test`, validate the current
+orchestration scaffold, and tear the stack down.
+
+Airflow local deployment, DAG validation, and runbooks are documented in
+[markdown/airflow.md](markdown/airflow.md).
 
 Test the current CLI:
 

@@ -17,7 +17,11 @@
 - Added local Kafka producer backpressure handling with bounded retry behavior.
 - Added optional Schema Registry basic auth and CA bundle settings.
 - Added a Docker Compose integration stack for Kafka and Schema Registry.
-- Added an optional `nox -s integration` session and integration test that publishes and consumes a real Schema Registry-framed Kafka event.
+- Added `nox -s kafka-integration`, `nox -s airflow-integration`, and an aggregate `nox -s integration` lane.
+- Added Airflow orchestration scaffolding with a dedicated DAG entrypoint, local Airflow Docker image, integration Compose profile, DAG import checks, and Airflow runbooks.
+- Added an integration test that publishes and consumes real Schema Registry-framed Kafka events.
+- Added an internal Airflow/Kafka contract integration test with a mocked Random User API response and shared fake Schema Registry.
+- Added local Docker Compose Airflow credentials to `.env.example` with explicit local-only placeholders.
 - Added Random User `country_code` derivation for supported source countries.
 - Added `SCHEMA_REGISTRY_URL` and `PII_PSEUDONYMIZATION_SALT` settings.
 - Added tests for profile contracts, quality rules, Schema Registry contracts, invalid-event privacy behavior, and the new privacy setting.
@@ -40,12 +44,18 @@
 - Updated the roadmap order so Kafka messaging precedes Airflow orchestration, Spark Streaming, and integration testing.
 - Added an intermediate roadmap step for container image and CI build optimization before Airflow, Spark, and Cassandra expansion.
 - Strengthened invalid picture URL rejection reasons with field-level details such as `invalid_picture_url:picture_large`.
+- Updated the default `uv run nox` lane to include integration sessions while keeping pre-commit limited to format, lint, typing, and unit tests.
+- Updated the local integration stack to use `.env`/`.env.example` variables for local Airflow and Postgres credentials instead of hardcoded compose secrets.
+- Updated the Airflow runtime documentation to make the current DAG scaffold scope explicit and note that Random User ingestion will be connected later.
 
 ### Fixed
 
 - Fixed CI failures caused by GitHub Actions being unable to download `astral-sh/setup-uv` archives from `codeload.github.com`.
 - Fixed Kafka topic subject naming so Schema Registry subjects are derived from configured topic names.
 - Fixed GitHub Actions lint failures by grouping writes to `GITHUB_OUTPUT` in CI/CD workflow shell scripts.
+- Fixed Schema Registry contract registration to use the same auth/TLS-aware configuration as the Kafka producer.
+- Fixed Airflow CLI JSON parsing in Nox to tolerate warnings before or after JSON output.
+- Fixed Kafka readiness checks inside Docker Compose and Nox to use the broker's internal listener.
 
 ## [0.1.0] - 2026-05-24
 
