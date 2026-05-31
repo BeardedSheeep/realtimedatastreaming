@@ -1,11 +1,14 @@
 # Copyright (c) 2026 BeardedSheeep
 
+import json
 import os
 import re
 import subprocess
+import time
 import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 
 import nox
 from nox.sessions import Session
@@ -17,6 +20,10 @@ PYTHON_VERSION = "3.12"
 SOURCE_PATHS = [path for path in (PROJECT_PACKAGE, "tests") if (PROJECT_DIR / path).exists()] or ["."]
 DOCKER_BUILD_ENV = {"DOCKER_BUILDKIT": "1"}
 TRIVY_TIMEOUT = os.getenv("TRIVY_TIMEOUT", "20m")
+AIRFLOW_DAG_ID = "realtimedatastreaming_user_profile_ingestion"
+AIRFLOW_HEALTH_TIMEOUT_SECONDS = int(os.getenv("AIRFLOW_HEALTH_TIMEOUT_SECONDS", "120"))
+AIRFLOW_TEST_EXECUTION_DATE = os.getenv("AIRFLOW_TEST_EXECUTION_DATE", "2026-01-01")
+KAFKA_STACK_HEALTH_TIMEOUT_SECONDS = int(os.getenv("KAFKA_STACK_HEALTH_TIMEOUT_SECONDS", "120"))
 DOCKER_RUNTIME_SMOKE_SCRIPT = """
 import json
 
@@ -91,7 +98,7 @@ nox.needs_version = ">=2025.5.1"
 nox.options.reuse_existing_virtualenvs = False
 nox.options.error_on_missing_interpreters = True
 nox.options.default_venv_backend = "uv"
-nox.options.sessions = ["format", "lint", "typing", "test"]
+nox.options.sessions = ["format", "lint", "typing", "test", "integration"]
 
 
 def docker_image_name() -> str:
@@ -115,7 +122,7 @@ def git_revision() -> str:
 
 def project_metadata() -> dict[str, object]:
     with (PROJECT_DIR / "pyproject.toml").open("rb") as pyproject:
-        return tomllib.load(pyproject)["project"]
+        return cast(dict[str, object], tomllib.load(pyproject)["project"])
 
 
 def github_repository_url() -> str | None:
@@ -141,8 +148,8 @@ def docker_build_args() -> dict[str, str]:
         "OCI_CREATED": os.getenv("OCI_CREATED", datetime.now(UTC).isoformat(timespec="seconds")),
         "OCI_DESCRIPTION": os.getenv("OCI_DESCRIPTION", str(metadata.get("description", ""))),
         "OCI_LICENSES": os.getenv("OCI_LICENSES", str(metadata.get("license", "unknown"))),
-        "OCI_REF_NAME": os.getenv("OCI_REF_NAME") or os.getenv("GITHUB_REF_NAME", version),
-        "OCI_REVISION": os.getenv("OCI_REVISION") or os.getenv("GITHUB_SHA", git_revision()),
+        "OCI_REF_NAME": os.getenv("OCI_REF_NAME") or os.getenv("GITHUB_REF_NAME") or version,
+        "OCI_REVISION": os.getenv("OCI_REVISION") or os.getenv("GITHUB_SHA") or git_revision(),
         "OCI_SOURCE": source,
         "OCI_TITLE": os.getenv("OCI_TITLE", str(metadata.get("name", PROJECT_NAME))),
         "OCI_URL": os.getenv("OCI_URL", str(urls.get("Homepage", source))),
@@ -170,6 +177,195 @@ def docker_build_command(dockerfile: Path, image_name: str) -> list[str]:
     for name, value in docker_build_args().items():
         command.extend(["--build-arg", f"{name}={value}"])
     return command
+
+
+def airflow_cli_command(compose_file: Path, *airflow_args: str) -> list[str]:
+    return [
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "--profile",
+        "airflow",
+        "exec",
+        "-T",
+        "airflow-scheduler",
+        "airflow",
+        *airflow_args,
+    ]
+
+
+def airflow_webserver_health_command(compose_file: Path) -> list[str]:
+    return [
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "--profile",
+        "airflow",
+        "exec",
+        "-T",
+        "airflow-webserver",
+        "curl",
+        "-fsS",
+        "http://localhost:8080/health",
+    ]
+
+
+def kafka_topics_command(compose_file: Path) -> list[str]:
+    return [
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "exec",
+        "-T",
+        "kafka",
+        "kafka-topics",
+        "--bootstrap-server",
+        "localhost:29092",
+        "--list",
+    ]
+
+
+def schema_registry_subjects_command(compose_file: Path) -> list[str]:
+    return [
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "exec",
+        "-T",
+        "schema-registry",
+        "curl",
+        "-fsS",
+        "http://localhost:8081/subjects",
+    ]
+
+
+def run_command_output(command: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        cwd=PROJECT_DIR,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+
+
+def wait_for_airflow_health(
+    session: Session,
+    compose_file: Path,
+    *,
+    timeout_seconds: int = AIRFLOW_HEALTH_TIMEOUT_SECONDS,
+) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    last_output = ""
+
+    while time.monotonic() < deadline:
+        result = run_command_output(airflow_webserver_health_command(compose_file))
+        last_output = result.stdout
+        if result.returncode == 0 and _airflow_health_is_ready(result.stdout):
+            session.log("Airflow webserver, metadata database, and scheduler are healthy")
+            return
+        time.sleep(5)
+
+    session.error(f"Airflow did not become healthy within {timeout_seconds} seconds. Last output:\n{last_output}")
+
+
+def wait_for_kafka_stack_health(
+    session: Session,
+    compose_file: Path,
+    *,
+    timeout_seconds: int = KAFKA_STACK_HEALTH_TIMEOUT_SECONDS,
+) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    last_kafka_output = ""
+    last_schema_registry_output = ""
+
+    while time.monotonic() < deadline:
+        kafka_result = run_command_output(kafka_topics_command(compose_file))
+        schema_registry_result = run_command_output(schema_registry_subjects_command(compose_file))
+        last_kafka_output = kafka_result.stdout
+        last_schema_registry_output = schema_registry_result.stdout
+        if kafka_result.returncode == 0 and schema_registry_result.returncode == 0:
+            session.log("Kafka and Schema Registry are healthy")
+            return
+        time.sleep(5)
+
+    session.error(
+        "Kafka stack did not become healthy within "
+        f"{timeout_seconds} seconds.\nKafka output:\n{last_kafka_output}\n"
+        f"Schema Registry output:\n{last_schema_registry_output}"
+    )
+
+
+def _airflow_health_is_ready(output: str) -> bool:
+    try:
+        health = json.loads(output)
+    except json.JSONDecodeError:
+        return False
+
+    return _nested_status(health, "metadatabase") == "healthy" and _nested_status(health, "scheduler") == "healthy"
+
+
+def _nested_status(payload: object, key: str) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    value = payload.get(key)
+    if not isinstance(value, dict):
+        return None
+    status = value.get("status")
+    return status if isinstance(status, str) else None
+
+
+def assert_airflow_dag_is_loaded(session: Session, compose_file: Path) -> None:
+    dag_list = _airflow_json_output(session, compose_file, "dags", "list", "--output", "json")
+    if not isinstance(dag_list, list):
+        session.error(f"Unexpected Airflow DAG list output: {dag_list!r}")
+
+    dag_ids: set[str] = set()
+    for dag in dag_list:
+        if not isinstance(dag, dict):
+            continue
+        dag_id = dag.get("dag_id")
+        if isinstance(dag_id, str):
+            dag_ids.add(dag_id)
+
+    if AIRFLOW_DAG_ID not in dag_ids:
+        session.error(f"Airflow DAG {AIRFLOW_DAG_ID!r} was not loaded. Loaded DAGs: {sorted(dag_ids)}")
+
+
+def assert_airflow_has_no_import_errors(session: Session, compose_file: Path) -> None:
+    import_errors = _airflow_json_output(session, compose_file, "dags", "list-import-errors", "--output", "json")
+    if import_errors != []:
+        session.error(f"Airflow DAG import errors detected: {import_errors!r}")
+
+
+def _airflow_json_output(session: Session, compose_file: Path, *airflow_args: str) -> Any:
+    result = run_command_output(airflow_cli_command(compose_file, *airflow_args))
+    if result.returncode != 0:
+        session.error(f"Airflow command failed: {' '.join(airflow_args)}\n{result.stdout}")
+    try:
+        return _parse_json_from_command_output(result.stdout)
+    except ValueError:
+        session.error(f"Airflow command did not return valid JSON: {' '.join(airflow_args)}\n{result.stdout}")
+
+
+def _parse_json_from_command_output(output: str) -> Any:
+    decoder = json.JSONDecoder()
+    for index, character in enumerate(output):
+        if character not in "[{":
+            continue
+        try:
+            payload, _ = decoder.raw_decode(output[index:])
+        except json.JSONDecodeError:
+            continue
+        return payload
+
+    msg = "command output did not contain a JSON object or array"
+    raise ValueError(msg)
 
 
 def sync(session: Session, *groups: str, install_project: bool = True) -> None:
@@ -235,8 +431,14 @@ def test(session: Session) -> None:
     session.run("pytest", str(tests_dir), "--cov", PROJECT_PACKAGE, "--cov-report", "term-missing", *session.posargs)
 
 
-@nox.session(python=PYTHON_VERSION)
+@nox.session(venv_backend="none")
 def integration(session: Session) -> None:
+    session.notify("kafka-integration")
+    session.notify("airflow-integration")
+
+
+@nox.session(name="kafka-integration", python=PYTHON_VERSION)
+def kafka_integration(session: Session) -> None:
     compose_file = PROJECT_DIR / PROJECT_PACKAGE / "docker-compose.integration.yml"
     if not compose_file.exists():
         session.error(f"Integration compose file not found: {compose_file}")
@@ -244,9 +446,60 @@ def integration(session: Session) -> None:
     sync(session, "test")
     session.run("docker", "compose", "-f", str(compose_file), "up", "-d", external=True)
     try:
+        wait_for_kafka_stack_health(session, compose_file)
         session.run("pytest", "tests/integration", "-m", "integration", *session.posargs)
     finally:
-        session.run("docker", "compose", "-f", str(compose_file), "down", "-v", external=True)
+        session.run("docker", "compose", "-f", str(compose_file), "down", "-v", "--remove-orphans", external=True)
+
+
+@nox.session(name="airflow-integration", venv_backend="none")
+def airflow_integration(session: Session) -> None:
+    compose_file = PROJECT_DIR / PROJECT_PACKAGE / "docker-compose.integration.yml"
+    if not compose_file.exists():
+        session.error(f"Integration compose file not found: {compose_file}")
+
+    session.run(
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "--profile",
+        "airflow",
+        "up",
+        "--build",
+        "-d",
+        env=DOCKER_BUILD_ENV,
+        external=True,
+    )
+    try:
+        wait_for_airflow_health(session, compose_file)
+        assert_airflow_dag_is_loaded(session, compose_file)
+        assert_airflow_has_no_import_errors(session, compose_file)
+        session.run(
+            *airflow_cli_command(
+                compose_file,
+                "dags",
+                "test",
+                AIRFLOW_DAG_ID,
+                AIRFLOW_TEST_EXECUTION_DATE,
+            ),
+            external=True,
+        )
+    finally:
+        session.run(
+            "docker",
+            "compose",
+            "-f",
+            str(compose_file),
+            "--profile",
+            "airflow",
+            "down",
+            "-v",
+            "--rmi",
+            "local",
+            "--remove-orphans",
+            external=True,
+        )
 
 
 @nox.session(python=PYTHON_VERSION)

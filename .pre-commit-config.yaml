@@ -11,7 +11,7 @@ repos:
     hooks:
       - id: nox-pre-commit
         name: Run Nox sessions before commit
-        entry: env PYTHONDONTWRITEBYTECODE=1 uv run --locked nox
+        entry: env PYTHONDONTWRITEBYTECODE=1 uv run --locked nox -s format lint typing test
         language: system
         pass_filenames: false
         always_run: true

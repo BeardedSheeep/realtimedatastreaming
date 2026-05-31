@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from realtimedatastreaming.ingestion.schema_registry import (
     KafkaJsonSchemaContract,
     kafka_value_contracts_for_topics,
+    schema_registry_config_from_settings,
 )
 from realtimedatastreaming.settings import Settings
 
@@ -83,7 +84,7 @@ class SchemaRegistryValueSerializer:
         *,
         auto_register_schemas: bool = False,
     ) -> SchemaRegistryValueSerializer:
-        schema_registry_client = SchemaRegistryClient(_schema_registry_config_from_settings(settings))
+        schema_registry_client = SchemaRegistryClient(schema_registry_config_from_settings(settings))
         users_created_contract, users_created_invalid_contract = kafka_value_contracts_for_topics(
             users_created_topic=settings.kafka_users_created_topic,
             users_created_invalid_topic=settings.kafka_users_created_invalid_topic,
@@ -294,20 +295,6 @@ def _producer_config_from_settings(settings: Settings) -> dict[str, str]:
             "sasl.username": settings.kafka_sasl_username,
             "sasl.password": settings.kafka_sasl_password.get_secret_value(),
         })
-
-    return config
-
-
-def _schema_registry_config_from_settings(settings: Settings) -> dict[str, str]:
-    config = {"url": str(settings.schema_registry_url)}
-
-    if settings.schema_registry_basic_auth_user_info is not None:
-        config.update({
-            "basic.auth.credentials.source": "USER_INFO",
-            "basic.auth.user.info": settings.schema_registry_basic_auth_user_info.get_secret_value(),
-        })
-    if settings.schema_registry_ssl_ca_location is not None:
-        config["ssl.ca.location"] = settings.schema_registry_ssl_ca_location
 
     return config
 

@@ -192,8 +192,13 @@ Actions:
 3. Configure retries, schedules, catchup, tags, and backfill policy explicitly.
 4. Manage Airflow connections and secrets outside code.
 5. Add DAG import tests.
-6. Add scheduler and failed-run runbooks.
-7. Document the DAG deployment path.
+6. Keep the application `Dockerfile` dedicated to the app/job runtime.
+7. Add a dedicated Airflow image or Docker target for scheduler and webserver runtime.
+8. Extend the existing integration compose stack with Postgres, `airflow-init`, `airflow-webserver`, and `airflow-scheduler`.
+9. Keep Kafka and Schema Registry in the same integration compose stack.
+10. Mount or copy DAGs into the Airflow runtime and configure `AIRFLOW__CORE__DAGS_FOLDER` explicitly.
+11. Add scheduler and failed-run runbooks.
+12. Document the DAG deployment path.
 
 Deliverables:
 
@@ -201,7 +206,10 @@ Deliverables:
 - DAG import tests;
 - retry and backfill policy;
 - Airflow connection and secret handling notes;
+- dedicated Airflow runtime image;
+- integration compose stack with Airflow webserver and scheduler;
 - failed DAG runbook.
+- DAG deployment path documentation.
 
 ## Step 7 - Spark Streaming
 
@@ -239,14 +247,16 @@ Actions:
 2. Mark service-dependent tests with `@pytest.mark.integration`.
 3. Exclude integration tests from the default pytest run.
 4. Run Kafka and Schema Registry with `realtimedatastreaming/docker-compose.integration.yml`.
-5. Add `nox -s integration`.
-6. Produce and consume at least one real Schema Registry-framed event.
+5. Add `nox -s kafka-integration` for the Kafka/Schema Registry integration lane.
+6. Keep `nox -s integration` as the aggregate integration lane across runtime bricks.
+7. Produce and consume at least one real Schema Registry-framed event.
 
 Deliverables:
 
 - optional integration compose stack;
 - pytest marker configuration;
-- `nox -s integration`;
+- `nox -s kafka-integration`;
+- aggregate `nox -s integration`;
 - end-to-end messaging test.
 
 ## Step 9 - CI/CD Baseline
