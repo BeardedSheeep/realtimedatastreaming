@@ -208,7 +208,7 @@ def airflow_webserver_health_command(compose_file: Path) -> list[str]:
         "airflow-webserver",
         "curl",
         "-fsS",
-        "http://localhost:8080/health",
+        "http://airflow-webserver:8080/health",
     ]
 
 
@@ -223,7 +223,7 @@ def kafka_topics_command(compose_file: Path) -> list[str]:
         "kafka",
         "kafka-topics",
         "--bootstrap-server",
-        "localhost:29092",
+        "kafka:29092",
         "--list",
     ]
 
@@ -239,7 +239,7 @@ def schema_registry_subjects_command(compose_file: Path) -> list[str]:
         "schema-registry",
         "curl",
         "-fsS",
-        "http://localhost:8081/subjects",
+        "http://schema-registry:8081/subjects",
     ]
 
 
@@ -435,6 +435,7 @@ def test(session: Session) -> None:
 def integration(session: Session) -> None:
     session.notify("kafka-integration")
     session.notify("airflow-integration")
+    session.notify("spark-integration")
 
 
 @nox.session(name="kafka-integration", python=PYTHON_VERSION)
@@ -447,7 +448,7 @@ def kafka_integration(session: Session) -> None:
     session.run("docker", "compose", "-f", str(compose_file), "up", "-d", external=True)
     try:
         wait_for_kafka_stack_health(session, compose_file)
-        session.run("pytest", "tests/integration", "-m", "integration", *session.posargs)
+        session.run("pytest", "tests/integration/messaging", "-m", "integration", *session.posargs)
     finally:
         session.run("docker", "compose", "-f", str(compose_file), "down", "-v", "--remove-orphans", external=True)
 
@@ -493,6 +494,73 @@ def airflow_integration(session: Session) -> None:
             str(compose_file),
             "--profile",
             "airflow",
+            "down",
+            "-v",
+            "--rmi",
+            "local",
+            "--remove-orphans",
+            external=True,
+        )
+
+
+@nox.session(name="spark-integration", python=PYTHON_VERSION)
+def spark_integration(session: Session) -> None:
+    compose_file = PROJECT_DIR / PROJECT_PACKAGE / "docker-compose.integration.yml"
+    if not compose_file.exists():
+        session.error(f"Integration compose file not found: {compose_file}")
+
+    session.run(
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "--profile",
+        "spark-test",
+        "down",
+        "-v",
+        "--remove-orphans",
+        external=True,
+    )
+    session.run(
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "up",
+        "-d",
+        "kafka",
+        "schema-registry",
+        env=DOCKER_BUILD_ENV,
+        external=True,
+    )
+    try:
+        wait_for_kafka_stack_health(session, compose_file)
+        session.run(
+            "docker",
+            "compose",
+            "-f",
+            str(compose_file),
+            "--profile",
+            "spark-test",
+            "run",
+            "--build",
+            "--rm",
+            "spark-user-profiles-test",
+            "tests/integration/streaming",
+            "-m",
+            "integration",
+            *session.posargs,
+            env=DOCKER_BUILD_ENV,
+            external=True,
+        )
+    finally:
+        session.run(
+            "docker",
+            "compose",
+            "-f",
+            str(compose_file),
+            "--profile",
+            "spark-test",
             "down",
             "-v",
             "--rmi",

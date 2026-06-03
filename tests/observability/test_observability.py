@@ -29,6 +29,32 @@ def test_configure_observability_emits_structured_json(capsys: Any) -> None:
     assert "timestamp" in payload
 
 
+def test_structured_json_includes_extra_monitoring_fields(capsys: Any) -> None:
+    settings = Settings()
+    configure_observability(settings)
+
+    logging.getLogger("realtimedatastreaming.test").info(
+        "spark_user_profiles_batch_finished",
+        extra={
+            "input_records": 10,
+            "invalid_records": 2,
+            "prepared_cassandra_writes": 8,
+            "batch_duration_ms": 123,
+            "sink_type": "dummy",
+        },
+    )
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.err)
+
+    assert payload["message"] == "spark_user_profiles_batch_finished"
+    assert payload["input_records"] == 10
+    assert payload["invalid_records"] == 2
+    assert payload["prepared_cassandra_writes"] == 8
+    assert payload["batch_duration_ms"] == 123
+    assert payload["sink_type"] == "dummy"
+
+
 def test_configure_observability_supports_text_logs(capsys: Any) -> None:
     settings = Settings(LOG_FORMAT="text")
     configure_observability(settings)

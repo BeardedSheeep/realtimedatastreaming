@@ -45,6 +45,7 @@ REQUIRED_SECURITY_PACKAGE_PINS = {
 }
 
 AIRFLOW_DOCKERFILE = Path("realtimedatastreaming/orchestration/Dockerfile.airflow")
+SPARK_DOCKERFILE = Path("realtimedatastreaming/streaming/Dockerfile.spark")
 INTEGRATION_COMPOSE_FILE = Path("realtimedatastreaming/docker-compose.integration.yml")
 
 
@@ -99,6 +100,20 @@ def test_airflow_dockerfile_keeps_airflow_runtime_separate_from_application_imag
     assert "apache/airflow" not in app_dockerfile
 
 
+def test_spark_dockerfile_keeps_spark_driver_runtime_separate_from_application_image() -> None:
+    dockerfile = SPARK_DOCKERFILE.read_text()
+    app_dockerfile = Path("Dockerfile").read_text()
+
+    assert "openjdk-17-jre-headless" in dockerfile
+    assert "realtimedatastreaming-user-profiles-stream" in dockerfile
+    assert "FROM runtime AS test" in dockerfile
+    assert "COPY --from=test-builder --chown=spark:spark /app/pyproject.toml /app/pyproject.toml" in dockerfile
+    assert 'ENTRYPOINT ["python", "-m", "pytest"]' in dockerfile
+    assert "apache/airflow" not in dockerfile
+    assert "openjdk-17-jre-headless" not in app_dockerfile
+    assert "realtimedatastreaming-user-profiles-stream" not in app_dockerfile
+
+
 def test_integration_compose_includes_airflow_and_existing_runtime_services() -> None:
     compose = yaml.safe_load(INTEGRATION_COMPOSE_FILE.read_text())
     services = compose["services"]
@@ -118,6 +133,63 @@ def test_integration_compose_includes_airflow_and_existing_runtime_services() ->
     assert services["airflow-webserver"]["ports"] == ["8080:8080"]
     assert services["kafka"]["ports"] == ["19092:19092"]
     assert services["schema-registry"]["ports"] == ["18081:8081"]
+
+
+def test_integration_compose_includes_spark_driver_only_in_spark_profile() -> None:
+    compose = yaml.safe_load(INTEGRATION_COMPOSE_FILE.read_text())
+    spark_service = compose["services"]["spark-user-profiles"]
+
+    assert spark_service["profiles"] == ["spark"]
+    assert spark_service["build"] == {
+        "context": "..",
+        "dockerfile": "realtimedatastreaming/streaming/Dockerfile.spark",
+        "target": "runtime",
+    }
+    assert spark_service["depends_on"] == {
+        "kafka": {"condition": "service_healthy"},
+        "schema-registry": {"condition": "service_healthy"},
+    }
+    assert "cassandra" not in compose["services"]
+
+
+def test_integration_compose_includes_spark_test_service_only_in_spark_test_profile() -> None:
+    compose = yaml.safe_load(INTEGRATION_COMPOSE_FILE.read_text())
+    spark_test_service = compose["services"]["spark-user-profiles-test"]
+
+    assert spark_test_service["profiles"] == ["spark-test"]
+    assert spark_test_service["build"] == {
+        "context": "..",
+        "dockerfile": "realtimedatastreaming/streaming/Dockerfile.spark",
+        "target": "test",
+    }
+    assert spark_test_service["depends_on"] == {
+        "kafka": {"condition": "service_healthy"},
+        "schema-registry": {"condition": "service_healthy"},
+    }
+
+
+def test_integration_compose_configures_spark_driver_runtime_environment() -> None:
+    compose = yaml.safe_load(INTEGRATION_COMPOSE_FILE.read_text())
+    spark_environment = compose["services"]["spark-user-profiles"]["environment"]
+
+    assert spark_environment["KAFKA_BOOTSTRAP_SERVERS"] == "kafka:29092"
+    assert spark_environment["KAFKA_USERS_CREATED_TOPIC"] == "users_created"
+    assert spark_environment["SCHEMA_REGISTRY_URL"] == "http://schema-registry:8081"
+    assert spark_environment["SPARK_APP_NAME"] == "realtimedatastreaming-user-profiles"
+    assert spark_environment["SPARK_MASTER_URL"] == "local[*]"
+    assert spark_environment["SPARK_CHECKPOINT_LOCATION"] == "/tmp/realtimedatastreaming/checkpoints"
+    assert "CASSANDRA_PASSWORD" not in spark_environment
+    assert "KAFKA_SASL_PASSWORD" not in spark_environment
+
+
+def test_integration_compose_configures_spark_test_runtime_environment() -> None:
+    compose = yaml.safe_load(INTEGRATION_COMPOSE_FILE.read_text())
+    spark_environment = compose["services"]["spark-user-profiles-test"]["environment"]
+
+    assert spark_environment["KAFKA_BOOTSTRAP_SERVERS"] == "kafka:29092"
+    assert spark_environment["SCHEMA_REGISTRY_URL"] == "http://schema-registry:8081"
+    assert spark_environment["SPARK_APP_NAME"] == "realtimedatastreaming-user-profiles-test"
+    assert spark_environment["SPARK_MASTER_URL"] == "local[*]"
 
 
 def test_integration_compose_configures_airflow_dag_folder_and_runtime_environment() -> None:
@@ -150,8 +222,12 @@ def test_integration_compose_configures_airflow_dag_folder_and_runtime_environme
 def test_integration_compose_checks_kafka_health_on_internal_listener() -> None:
     compose = yaml.safe_load(INTEGRATION_COMPOSE_FILE.read_text())
     kafka_healthcheck = compose["services"]["kafka"]["healthcheck"]["test"]
+    schema_registry_healthcheck = compose["services"]["schema-registry"]["healthcheck"]["test"]
+    airflow_healthcheck = compose["services"]["airflow-webserver"]["healthcheck"]["test"]
 
-    assert kafka_healthcheck == ["CMD", "kafka-topics", "--bootstrap-server", "localhost:29092", "--list"]
+    assert kafka_healthcheck == ["CMD", "kafka-topics", "--bootstrap-server", "kafka:29092", "--list"]
+    assert schema_registry_healthcheck == ["CMD", "curl", "--fail", "http://schema-registry:8081/subjects"]
+    assert airflow_healthcheck == ["CMD", "curl", "--fail", "http://airflow-webserver:8080/health"]
 
 
 def test_integration_compose_reads_local_airflow_credentials_from_environment() -> None:
@@ -179,7 +255,7 @@ def test_nox_airflow_integration_commands_target_airflow_profile() -> None:
         "airflow-webserver",
         "curl",
         "-fsS",
-        "http://localhost:8080/health",
+        "http://airflow-webserver:8080/health",
     ]
     assert noxfile.airflow_cli_command(compose_file, "dags", "list", "--output", "json") == [
         "docker",
@@ -212,7 +288,7 @@ def test_nox_kafka_integration_commands_target_default_integration_stack() -> No
         "kafka",
         "kafka-topics",
         "--bootstrap-server",
-        "localhost:29092",
+        "kafka:29092",
         "--list",
     ]
     assert noxfile.schema_registry_subjects_command(compose_file) == [
@@ -225,7 +301,7 @@ def test_nox_kafka_integration_commands_target_default_integration_stack() -> No
         "schema-registry",
         "curl",
         "-fsS",
-        "http://localhost:8081/subjects",
+        "http://schema-registry:8081/subjects",
     ]
 
 
@@ -249,15 +325,40 @@ def test_airflow_integration_session_is_documented() -> None:
     assert "uv run nox -s integration" in airflow_doc
 
 
+def test_spark_runtime_and_recovery_path_are_documented() -> None:
+    spark_doc = Path("markdown/spark.md").read_text()
+    spark_compose_command = (
+        "docker compose -f realtimedatastreaming/docker-compose.integration.yml --profile spark up --build"
+    )
+
+    assert spark_compose_command in spark_doc
+    assert "uv run nox -s spark-integration" in spark_doc
+    assert "realtimedatastreaming/streaming/Dockerfile.spark" in spark_doc
+    assert "SPARK_CHECKPOINT_LOCATION" in spark_doc
+    assert "Stuck Stream" in spark_doc
+    assert "Checkpoint Recovery" in spark_doc
+    assert "CassandraDB output verification is added only after the real sink is connected." in spark_doc
+
+
 def test_nox_integration_session_aggregates_runtime_integration_sessions() -> None:
     noxfile_text = Path("noxfile.py").read_text()
     readme = Path("README.md").read_text()
 
     assert 'session.notify("kafka-integration")' in noxfile_text
     assert 'session.notify("airflow-integration")' in noxfile_text
+    assert 'session.notify("spark-integration")' in noxfile_text
     assert '@nox.session(name="kafka-integration", python=PYTHON_VERSION)' in noxfile_text
     assert '@nox.session(name="airflow-integration", venv_backend="none")' in noxfile_text
+    assert '@nox.session(name="spark-integration", python=PYTHON_VERSION)' in noxfile_text
     assert "uv run nox -s kafka-integration" in readme
+    assert "uv run nox -s spark-integration" in readme
+
+
+def test_spark_integration_session_is_documented_as_bounded_streaming_slice() -> None:
+    readme = Path("README.md").read_text()
+
+    assert "Use `spark-integration` to build and start the Spark profile" in readme
+    assert "run the bounded Kafka-to-Spark prepared-output test" in readme
 
 
 def test_kafka_integration_session_is_documented_as_runtime_contract_test() -> None:

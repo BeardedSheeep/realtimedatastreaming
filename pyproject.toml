@@ -46,6 +46,7 @@ Issues = "https://github.com/BeardedSheeep/realtimedatastreaming/issues"
 
 [project.scripts]
 realtimedatastreaming = "realtimedatastreaming.cli:main"
+realtimedatastreaming-user-profiles-stream = "realtimedatastreaming.streaming.user_profiles:main"
 
 [dependency-groups]
 dev = [

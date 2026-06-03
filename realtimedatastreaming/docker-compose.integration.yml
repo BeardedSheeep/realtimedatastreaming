@@ -69,7 +69,7 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     healthcheck:
-      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:29092", "--list"]
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "kafka:29092", "--list"]
       interval: 5s
       timeout: 10s
       retries: 24
@@ -86,7 +86,7 @@ services:
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:29092
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8081/subjects"]
+      test: ["CMD", "curl", "--fail", "http://schema-registry:8081/subjects"]
       interval: 5s
       timeout: 10s
       retries: 24
@@ -118,7 +118,7 @@ services:
       - "8080:8080"
     command: webserver
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "--fail", "http://airflow-webserver:8080/health"]
       interval: 10s
       timeout: 10s
       retries: 12
@@ -131,6 +131,55 @@ services:
         condition: service_completed_successfully
     command: scheduler
 
+  spark-user-profiles:
+    build:
+      context: ..
+      dockerfile: realtimedatastreaming/streaming/Dockerfile.spark
+      target: runtime
+    profiles: ["spark"]
+    environment:
+      APP_ENV: development
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_USERS_CREATED_TOPIC: users_created
+      KAFKA_USERS_CREATED_INVALID_TOPIC: users_created_invalid
+      LOG_FORMAT: json
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      SPARK_APP_NAME: realtimedatastreaming-user-profiles
+      SPARK_CHECKPOINT_LOCATION: /tmp/realtimedatastreaming/checkpoints
+      SPARK_MASTER_URL: local[*]
+    volumes:
+      - spark_checkpoints:/tmp/realtimedatastreaming/checkpoints
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+
+  spark-user-profiles-test:
+    build:
+      context: ..
+      dockerfile: realtimedatastreaming/streaming/Dockerfile.spark
+      target: test
+    profiles: ["spark-test"]
+    environment:
+      APP_ENV: development
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_USERS_CREATED_TOPIC: users_created
+      KAFKA_USERS_CREATED_INVALID_TOPIC: users_created_invalid
+      LOG_FORMAT: json
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      SPARK_APP_NAME: realtimedatastreaming-user-profiles-test
+      SPARK_CHECKPOINT_LOCATION: /tmp/realtimedatastreaming/checkpoints
+      SPARK_MASTER_URL: local[*]
+    volumes:
+      - spark_checkpoints:/tmp/realtimedatastreaming/checkpoints
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+
 volumes:
   airflow_logs:
   airflow_postgres:
+  spark_checkpoints:

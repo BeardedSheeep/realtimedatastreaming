@@ -213,51 +213,67 @@ Deliverables:
 
 ## Step 7 - Spark Streaming
 
-Goal: validate, enrich, and route Kafka events through a distributed stream-processing layer.
+Status: in progress. Current slice prepares validated profile records for CassandraDB with a dummy sink.
+
+Goal: process Kafka user profile events with Spark, validate them against Kafka-facing contracts,
+and prepare records for the first CassandraDB query pattern.
 
 Actions:
 
-1. Create the Spark Streaming job entrypoint.
-2. Consume the `users_created` topic.
-3. Validate event payloads against the Kafka-facing contracts.
-4. Apply quality rules and enrichment.
-5. Route invalid records with rejection reasons.
-6. Configure checkpointing explicitly.
-7. Define failure and replay semantics.
-8. Emit micro-batch and sink metrics.
+1. Create a Spark Streaming entrypoint with stream processing logic kept outside orchestration code.
+2. Consume `users_created` with explicit Kafka and Schema Registry configuration.
+3. Validate payloads against Kafka-facing contracts before preparing records for storage.
+4. Prepare valid `user_profiles_by_source_id` records and write them to a dummy sink until CassandraDB is connected.
+5. Emit local batch signals: input records, prepared Cassandra writes,
+   invalid records, batch duration, and sink failures.
+6. Configure checkpointing explicitly with a single `SPARK_CHECKPOINT_LOCATION`.
+7. Keep replay manual through checkpoint control and require future Cassandra writes to use the stable
+   `source`, `source_user_id`, `event_type` idempotence key before production scheduling.
+8. Add Spark driver runtime packaging and compose services only when containerized validation is needed.
+9. Add a bounded integration test that produces one Kafka event, runs one Spark micro-batch, verifies prepared
+    Cassandra-shaped output, and checks basic local monitoring output.
+10. Document stuck-stream recovery, checkpoint recovery, and Spark deployment.
 
 Deliverables:
 
 - executable Spark Streaming job;
-- checkpoint configuration;
-- valid profile stream;
-- invalid profile stream;
+- transformation unit tests;
+- explicit `SPARK_CHECKPOINT_LOCATION` configuration;
+- manual checkpoint replay policy and stable Cassandra idempotence key;
+- Cassandra-shaped valid profile records;
+- dummy sink for the current Spark module slice;
 - schema compatibility tests;
-- stuck or failing streaming job runbook.
+- dedicated Spark runtime image;
+- integration compose stack for the first executable Spark slice;
+- bounded Kafka-to-Spark integration test that verifies prepared Cassandra-shaped output;
+- minimum local monitoring signal set;
+- stuck or failing streaming job runbook;
+- Spark deployment path documentation.
 
-## Step 8 - Integration Testing
+## Step 8 - CassandraDB Integration
 
-Status: implemented as an optional test lane.
-
-Goal: prove that the Kafka producer, Schema Registry contract, and real broker work together.
+Goal: replace the dummy Spark sink with real idempotent CassandraDB writes for the first queryable
+profile view.
 
 Actions:
 
-1. Keep unit tests fast and deterministic by default.
-2. Mark service-dependent tests with `@pytest.mark.integration`.
-3. Exclude integration tests from the default pytest run.
-4. Run Kafka and Schema Registry with `realtimedatastreaming/docker-compose.integration.yml`.
-5. Add `nox -s kafka-integration` for the Kafka/Schema Registry integration lane.
-6. Keep `nox -s integration` as the aggregate integration lane across runtime bricks.
-7. Produce and consume at least one real Schema Registry-framed event.
+1. Add CassandraDB to the integration compose stack with an explicit service endpoint.
+2. Version the CQL schema for `user_profiles_by_source_id` from the query pattern.
+3. Implement the Spark Cassandra sink using the stable `source`, `source_user_id`, `event_type`
+   idempotence key.
+4. Keep writes retry-safe before enabling scheduled streaming execution.
+5. Extend the Spark integration test to verify real CassandraDB output.
+6. Emit local sink success and failure signals for Cassandra writes.
+7. Document CassandraDB recovery, replay safety, and schema migration steps.
 
 Deliverables:
 
-- optional integration compose stack;
-- pytest marker configuration;
-- `nox -s kafka-integration`;
-- aggregate `nox -s integration`;
-- end-to-end messaging test.
+- CassandraDB compose service for integration validation;
+- versioned CQL schema;
+- real Spark Cassandra sink;
+- idempotent write path;
+- CassandraDB output verification in the bounded Spark integration test;
+- CassandraDB recovery and migration notes.
 
 ## Step 9 - CI/CD Baseline
 
@@ -368,7 +384,7 @@ Target platform progression:
 |---|---|---|
 | 1 | Kubernetes CronJob + Kafka + Schema Registry | production-shaped ingestion and publication |
 | 2 | Airflow + Kafka + Schema Registry | scheduled orchestration, retries, backfills, ownership |
-| 3 | Airflow + Kafka + Spark | distributed validation and enrichment |
+| 3 | Airflow + Kafka + Spark local mode | stream validation and enrichment |
 | 4 | Airflow + Kafka + Spark + Cassandra | queryable profiles and quality views |
 
 ## Step 12 - SRE And Observability
@@ -478,25 +494,22 @@ Deliverables:
 - security exception policy;
 - production hardening checklist.
 
-## Step 15 - Cassandra Persistence
+## Step 15 - CassandraDB Operations Hardening
 
-Goal: persist queryable profiles and quality monitoring views from concrete access patterns.
+Goal: harden the CassandraDB storage path after the Step 8 integration is executable.
 
 Actions:
 
-1. Design CQL schema from query patterns.
-2. Idempotent writes.
-3. TTL and retention policy.
-4. Backup and restore runbook.
-5. Compaction and repair guidance.
-6. Metrics for write latency, failed writes, storage growth, and tombstones.
+1. Define TTL and retention policy.
+2. Add backup and restore runbook.
+3. Add compaction and repair guidance.
+4. Track write latency, failed writes, storage growth, and tombstones.
 
 Deliverables:
 
-- versioned CQL schema;
-- Cassandra writer or sink configuration;
-- schema tests where practical;
+- retention policy;
 - backup and restore runbook;
+- compaction and repair notes;
 - operational metrics and alerting notes.
 
 ## Definition Of Done For The MVP

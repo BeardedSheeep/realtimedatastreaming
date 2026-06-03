@@ -14,6 +14,7 @@ from realtimedatastreaming.settings import LOG_LEVELS, Settings
 request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
 trace_id: ContextVar[str | None] = ContextVar("trace_id", default=None)
 _MANAGED_HANDLER_ATTR = "_realtimedatastreaming_managed_handler"
+_STANDARD_LOG_RECORD_FIELDS = frozenset(logging.LogRecord("", 0, "", 0, "", (), None).__dict__)
 
 
 class JsonFormatter(logging.Formatter):
@@ -41,6 +42,7 @@ class JsonFormatter(logging.Formatter):
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
 
+        payload.update(_extra_log_fields(record))
         return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
 
@@ -83,6 +85,14 @@ def set_correlation_context(*, request_id_value: str | None = None, trace_id_val
     """Set correlation identifiers for the current execution context."""
     request_id.set(request_id_value)
     trace_id.set(trace_id_value)
+
+
+def _extra_log_fields(record: logging.LogRecord) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in record.__dict__.items()
+        if key not in _STANDARD_LOG_RECORD_FIELDS and not key.startswith("_")
+    }
 
 
 def _log_level(value: str) -> int:

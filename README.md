@@ -432,7 +432,7 @@ uv run nox -s dev
 ```
 
 The pre-commit hook runs secret scanning plus `format`, `lint`, `typing`, and `test`. It does not run
-Kafka or Airflow integration sessions; use `uv run nox` or `uv run nox -s integration` for those.
+Kafka, Airflow, or Spark integration sessions; use `uv run nox` or `uv run nox -s integration` for those.
 
 Run all checks:
 
@@ -452,6 +452,7 @@ uv run nox -s test
 uv run nox -s integration
 uv run nox -s kafka-integration
 uv run nox -s airflow-integration
+uv run nox -s spark-integration
 uv run nox -s audit
 ```
 
@@ -462,6 +463,8 @@ produce/consume and Schema Registry contract tests, then tear the stack down. Th
 the Random User API and does not run the ingestion job. Use `airflow-integration` to build and start the
 Airflow profile, check Airflow health, validate DAG import, run `airflow dags test`, validate the current
 orchestration scaffold, and tear the stack down.
+Use `spark-integration` to build and start the Spark profile, wait for Kafka and Schema Registry health,
+run the bounded Kafka-to-Spark prepared-output test, and tear the stack down.
 
 Airflow local deployment, DAG validation, and runbooks are documented in
 [markdown/airflow.md](markdown/airflow.md).
