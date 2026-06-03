@@ -125,7 +125,7 @@ jobs:
             cache_to=""
           else
             cache_from="type=registry,ref=${cache_ref}"
-            cache_to="type=registry,ref=${cache_ref},mode=max"
+            cache_to="type=registry,ref=${cache_ref},mode=max,ignore-error=true"
           fi
           {
             echo "cache_from=${cache_from}"

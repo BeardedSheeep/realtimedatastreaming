@@ -94,6 +94,7 @@ def test_airflow_dockerfile_keeps_airflow_runtime_separate_from_application_imag
     app_dockerfile = Path("Dockerfile").read_text()
 
     assert "FROM apache/airflow:2.10.5-python3.12" in dockerfile
+    assert "USER airflow" in dockerfile
     assert "pip install --no-cache-dir ." in dockerfile
     assert "apache/airflow" not in app_dockerfile
 
@@ -285,7 +286,7 @@ def test_nox_builds_plain_docker_command_with_oci_metadata(monkeypatch: pytest.M
 
 def test_nox_builds_buildx_command_with_registry_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DOCKER_CACHE_FROM", "type=registry,ref=example/app:buildcache")
-    monkeypatch.setenv("DOCKER_CACHE_TO", "type=registry,ref=example/app:buildcache,mode=max")
+    monkeypatch.setenv("DOCKER_CACHE_TO", "type=registry,ref=example/app:buildcache,mode=max,ignore-error=true")
     monkeypatch.setenv("DOCKER_TARGET", "runtime")
     monkeypatch.setenv("OCI_CREATED", "2026-01-01T00:00:00+00:00")
 
@@ -296,7 +297,7 @@ def test_nox_builds_buildx_command_with_registry_cache(monkeypatch: pytest.Monke
     assert "--cache-from" in command
     assert "type=registry,ref=example/app:buildcache" in command
     assert "--cache-to" in command
-    assert "type=registry,ref=example/app:buildcache,mode=max" in command
+    assert "type=registry,ref=example/app:buildcache,mode=max,ignore-error=true" in command
     assert "--target" in command
     assert "runtime" in command
 
