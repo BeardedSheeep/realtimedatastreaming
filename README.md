@@ -14,18 +14,26 @@ The functional goal is to answer one narrow question:
 
 > Are user profiles being ingested correctly, and which profiles are valid, invalid, enriched, or failing quality checks?
 
-The target MVP pipeline follows this flow:
+The current architecture is organized around this flow:
 
 ```text
 Random User API
     |
     v
-Python ingestion job
+Python ingestion boundary
     |
     v
 Kafka topic: users_created
-Kafka topic: users_created_invalid
+    |
+    v
+Spark Structured Streaming
+    |                    |
+    v                    v
+users_created_valid      users_created_invalid
 ```
+
+Profiles rejected before publication can also be sent directly to
+`users_created_invalid` by the ingestion boundary.
 
 The platform should make it possible to:
 
@@ -43,7 +51,7 @@ The target operational goal is to make this small service deployable like a seri
 
 ## Current Repository State
 
-The repository already contains the Python application foundation:
+The repository already contains the application and streaming foundation:
 
 - importable `realtimedatastreaming` package;
 - `realtimedatastreaming` smoke-test CLI;
@@ -57,6 +65,10 @@ The repository already contains the Python application foundation:
 - optional Docker Compose integration test for Kafka and Schema Registry;
 - user profile quality rules with explicit rejection reasons;
 - privacy-safe invalid profile events with allowlisted payloads and salted source id pseudonymization;
+- Spark Structured Streaming source, Schema Registry framing validation, JSON deserialization, profile quality
+  evaluation, and valid/invalid Kafka routing;
+- Java-enabled Spark container and a real Kafka-to-Spark-to-Kafka integration smoke test;
+- Airflow orchestration scaffold with contract registration, local deployment, DAG validation, and runbooks;
 - JSON/text logging with correlation context;
 - dependency management with `uv`;
 - developer checks orchestrated with `nox`;
@@ -99,10 +111,19 @@ The core domain is user profile ingestion quality:
 
 ### Execution Model
 
-The first execution model is a small Python ingestion job. It will call application code responsible for fetching, normalizing, validating, and publishing user profile events.
-The current Airflow DAG is an orchestration scaffold: it validates the runtime path and reserves the ingestion task, but the Random User API ingestion is not plugged into the DAG yet.
+The ingestion execution model is a small Python job responsible for fetching, normalizing, validating, and
+publishing user profile events. Its components are implemented, but the runnable ingestion job entrypoint is
+still pending.
+The current Airflow DAG is an orchestration scaffold: it validates the runtime path and reserves the ingestion
+task, but the Random User API ingestion is not plugged into the DAG yet.
 
-Scheduling starts with Kubernetes CronJob for a production-shaped MVP. Airflow is still part of the target platform and should take over when the pipeline has multiple tasks, backfills, retries, dataset dependencies, and operational ownership needs.
+Spark Structured Streaming is implemented as a separate long-running runtime. It consumes Schema
+Registry-framed `UserCreated` records, applies deterministic quality rules, and routes records to valid or
+invalid Kafka topics.
+
+Scheduling starts with Kubernetes CronJob for a production-shaped ingestion MVP. Airflow is implemented as
+the next orchestration layer and should take over when the ingestion entrypoint is connected and the pipeline
+requires backfills, retries, dataset dependencies, and operational ownership.
 
 ### Ingestion
 
@@ -152,7 +173,14 @@ Invalid events are published to:
 users_created_invalid
 ```
 
-The Confluent stack includes Schema Registry and Control Center to provide explicit message schemas and better topic observability.
+Spark publishes profiles that pass deserialization and quality validation to:
+
+```text
+users_created_valid
+```
+
+The local Confluent stack includes Kafka and Schema Registry for explicit message contracts and integration
+testing.
 
 Kafka value contracts are stored as versioned JSON Schema artifacts in
 `realtimedatastreaming/ingestion/schema_registry_schemas/` and use the standard topic-value subject naming strategy:
@@ -208,8 +236,24 @@ Invalid events are intentionally privacy-reduced:
 
 ### Processing
 
-Processing is intentionally minimal in the first deployable slice. The ingestion job validates profiles before publishing and routes invalid profiles to the invalid-events topic.
-The Airflow DAG does not execute this ingestion slice yet; it will be connected after the ingestion job entrypoint is ready. Spark, Cassandra persistence, enrichment, and dashboards remain later stages.
+The ingestion boundary validates normalized profiles before publication and can route rejected profiles to
+the invalid-events topic. The implemented Spark Structured Streaming job then:
+
+1. consumes binary values from `users_created`;
+2. validates the Confluent framing and registered schema id before JSON deserialization;
+3. applies the same domain quality rules used by the Python ingestion layer;
+4. publishes accepted profiles to `users_created_valid`;
+5. publishes deserialization and quality failures to `users_created_invalid`;
+6. uses separate Spark checkpoint paths for valid and invalid output routes.
+
+Run the streaming entrypoint with:
+
+```bash
+uv run realtimedatastreaming-spark
+```
+
+The Airflow DAG remains an orchestration scaffold and does not execute the Random User ingestion slice or
+manage the Spark runtime yet. Cassandra persistence, enrichment, and dashboards remain later stages.
 
 Implemented quality rules currently cover:
 
@@ -224,7 +268,8 @@ Implemented quality rules currently cover:
 - timezone offset sanity;
 - HTTPS picture URL checks.
 
-Spark Streaming remains the target distributed processing layer. It should be introduced once Kafka publication is stable and there is a concrete need for stream validation, enrichment, repartitioning, or stateful quality counters.
+The current Spark slice provides stateless validation and routing. Stateful quality counters, enrichment,
+operational deployment of the long-running stream, and Cassandra sinks remain future work.
 
 ### Storage
 
@@ -244,10 +289,11 @@ Its schema must be designed from query patterns rather than copied from source J
 | Kafka broker | Event bus | `19092` locally / platform-managed in envs |
 | Schema Registry | Kafka value contract registry | `18081` locally / platform-managed in envs |
 | Airflow | Pipeline orchestration and backfills | `8080` locally / platform-managed in envs |
-| Spark | Distributed stream processing | future local stack |
+| Spark | Kafka-to-Kafka validation and routing | containerized integration profile |
 | Cassandra | Queryable profile and quality views | future local stack |
 
-Local services should be added in phases: Kafka and Schema Registry first, then Airflow, then Spark, then Cassandra, with healthchecks and runbooks at each step.
+Kafka, Schema Registry, Airflow, and the Spark integration runtime are available in the current Compose
+stack. Cassandra remains planned.
 
 Start the local Kafka, Schema Registry, and Airflow integration stack with:
 
@@ -451,20 +497,23 @@ uv run nox -s typing
 uv run nox -s test
 uv run nox -s integration
 uv run nox -s kafka-integration
+uv run nox -s spark-integration
 uv run nox -s airflow-integration
 uv run nox -s audit
 ```
 
-The `integration` session aggregates the integration sessions for each runtime brick and is part of the
+The `integration` session aggregates the integration sessions for each runtime component and is part of the
 default `uv run nox` lane.
 Use `kafka-integration` to start Kafka and Schema Registry, wait for runtime health, run the real
 produce/consume and Schema Registry contract tests, then tear the stack down. This test does not call
-the Random User API and does not run the ingestion job. Use `airflow-integration` to build and start the
+the Random User API and does not run the ingestion job. Use `spark-integration` to build a Java-enabled
+Spark test image, run a Kafka-to-Spark-to-Kafka routing smoke test, and remove the test container.
+Use `airflow-integration` to build and start the
 Airflow profile, check Airflow health, validate DAG import, run `airflow dags test`, validate the current
 orchestration scaffold, and tear the stack down.
 
 Airflow local deployment, DAG validation, and runbooks are documented in
-[markdown/airflow.md](markdown/airflow.md).
+[realtimedatastreaming/orchestration/airflow.md](realtimedatastreaming/orchestration/airflow.md).
 
 Test the current CLI:
 
@@ -482,22 +531,20 @@ Important variables for profile contracts, messaging, and privacy:
 - `SCHEMA_REGISTRY_BASIC_AUTH_USER_INFO`: optional Schema Registry basic auth value.
 - `SCHEMA_REGISTRY_SSL_CA_LOCATION`: optional Schema Registry CA bundle path.
 - `KAFKA_BOOTSTRAP_SERVERS`: Kafka bootstrap servers.
-- `KAFKA_USERS_CREATED_TOPIC`: valid user profile event topic.
+- `KAFKA_USERS_CREATED_TOPIC`: source topic consumed by Spark.
+- `KAFKA_USERS_CREATED_VALID_TOPIC`: profiles accepted by Spark deserialization and quality validation.
 - `KAFKA_USERS_CREATED_INVALID_TOPIC`: invalid user profile event topic.
+- `SPARK_MASTER_URL`: Spark master URL, such as `local[*]` for development.
+- `SPARK_CHECKPOINT_LOCATION`: durable base path for Spark streaming checkpoints.
+- `SPARK_KAFKA_PACKAGE`: Spark Kafka connector package matching the installed Spark and Scala versions.
 - `PII_PSEUDONYMIZATION_SALT`: required outside `development` to pseudonymize invalid-event source ids.
 
 Airflow, Spark, Cassandra, Sentry, OpenTelemetry, and cloud secrets must be injected through environment variables or a managed secret store.
 
 ## Roadmap
 
-The detailed roadmap is available in [markdown/development-roadmap.md](markdown/development-roadmap.md).
+The [roadmap index](markdown/development-roadmap.md) is organized in this reading order:
 
-The main stages are now:
-
-1. define the application modules under `realtimedatastreaming/`;
-2. implement ingestion and quality rules;
-3. publish and validate Kafka events;
-4. optimize container image builds, image scans, and CI dependency installation;
-5. add deployment automation and release gates;
-6. add SRE runbooks, SLOs, and security controls;
-7. add Airflow, Spark, and Cassandra as staged distributed-system capabilities with explicit operational gates.
+1. [Application Roadmap](markdown/0.application-roadmap.md): ingestion, contracts, Kafka, Airflow, Spark, Cassandra, and application tests.
+2. [Platform Engineering Roadmap](markdown/1.platform-engineering-roadmap.md): build, CI/CD, releases, Kubernetes, observability, operations, and security.
+3. [Reliability Consolidation](markdown/2.reliability-consolidation.md): correctness under failure, isolation, capacity, recovery, chaos, and data lifecycle evidence.

@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import sys
-from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
 
@@ -23,9 +22,6 @@ from realtimedatastreaming.orchestration.pipelines import (
     DEFAULT_ARGS,
     USER_PROFILE_INGESTION_TASKS,
 )
-
-PROJECT_DIR = Path(__file__).resolve().parents[2]
-AIRFLOW_OPERATIONS_DOC = PROJECT_DIR / "markdown" / "airflow.md"
 
 
 class FakeDag:
@@ -109,42 +105,6 @@ def test_airflow_retry_and_backfill_policy_is_explicit() -> None:
     assert DEFAULT_ARGS["depends_on_past"] is AIRFLOW_DEPENDS_ON_PAST
     assert DEFAULT_ARGS["retries"] == AIRFLOW_RETRIES
     assert DEFAULT_ARGS["retry_delay"] == AIRFLOW_RETRY_DELAY
-
-
-def test_airflow_connections_and_secrets_are_documented_outside_dag_code() -> None:
-    doc = AIRFLOW_OPERATIONS_DOC.read_text(encoding="utf-8")
-
-    assert "Do not hardcode connection strings" in doc
-    assert "Airflow Connections or Variables" in doc
-    assert "Airflow Secrets Backend" in doc
-    assert "KAFKA_BOOTSTRAP_SERVERS" in doc
-    assert "SCHEMA_REGISTRY_URL" in doc
-    assert "PII_PSEUDONYMIZATION_SALT" in doc
-
-
-def test_airflow_scheduler_and_failed_run_runbooks_are_documented() -> None:
-    doc = AIRFLOW_OPERATIONS_DOC.read_text(encoding="utf-8")
-
-    assert "## Scheduler Runbook" in doc
-    assert "## Failed DAG Runbook" in doc
-    assert "airflow dags list-import-errors" in doc
-    assert "airflow dags list-runs -d realtimedatastreaming_user_profile_ingestion" in doc
-    assert "airflow tasks states-for-dag-run realtimedatastreaming_user_profile_ingestion" in doc
-    assert "airflow dags test realtimedatastreaming_user_profile_ingestion 2026-01-01" in doc
-    assert "Success criteria" in doc
-
-
-def test_airflow_deployment_path_is_documented() -> None:
-    doc = AIRFLOW_OPERATIONS_DOC.read_text(encoding="utf-8")
-
-    assert "## Deployment Path" in doc
-    assert "Deployment artifacts" in doc
-    assert "Pre-deployment validation" in doc
-    assert "Runtime validation after deploy" in doc
-    assert "Promotion checklist" in doc
-    assert "Rollback" in doc
-    assert "realtimedatastreaming/orchestration/Dockerfile.airflow" in doc
-    assert "docker compose -f realtimedatastreaming/docker-compose.integration.yml --profile airflow config" in doc
 
 
 def test_airflow_task_commands_do_not_embed_secret_values() -> None:

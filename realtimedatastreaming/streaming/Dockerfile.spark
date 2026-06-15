@@ -1,0 +1,35 @@
+# syntax=docker/dockerfile:1
+# Copyright (c) 2026 BeardedSheeep
+
+FROM ghcr.io/astral-sh/uv:0.9.17-python3.12-bookworm-slim
+
+ENV HOME=/app \
+    PATH="/app/.venv/bin:${PATH}" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    SPARK_LOCAL_IP=127.0.0.1
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openjdk-17-jre-headless \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml uv.lock README.md LICENSE ./
+
+RUN --mount=type=cache,id=uv-spark-cache,target=/root/.cache/uv,sharing=locked \
+    uv sync --frozen --group test --no-install-project
+
+COPY realtimedatastreaming ./realtimedatastreaming
+COPY tests ./tests
+
+RUN --mount=type=cache,id=uv-spark-cache,target=/root/.cache/uv,sharing=locked \
+    uv sync --frozen --group test --no-editable \
+    && python -c "from pyspark.sql import SparkSession; s = SparkSession.builder.master('local[1]').config('spark.jars.packages', 'org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.2').getOrCreate(); s.stop()" \
+    && mv /root/.ivy2.5.2 /app/.ivy2.5.2 \
+    && useradd --system --create-home --home-dir /app --shell /usr/sbin/nologin spark \
+    && chown -R spark:spark /app
+
+USER spark
+
+CMD ["pytest", "tests/integration/streaming", "-m", "integration", "-q"]

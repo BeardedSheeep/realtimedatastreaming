@@ -223,7 +223,7 @@ def kafka_topics_command(compose_file: Path) -> list[str]:
         "kafka",
         "kafka-topics",
         "--bootstrap-server",
-        "localhost:29092",
+        "kafka:29092",
         "--list",
     ]
 
@@ -434,6 +434,7 @@ def test(session: Session) -> None:
 @nox.session(venv_backend="none")
 def integration(session: Session) -> None:
     session.notify("kafka-integration")
+    session.notify("spark-integration")
     session.notify("airflow-integration")
 
 
@@ -447,9 +448,30 @@ def kafka_integration(session: Session) -> None:
     session.run("docker", "compose", "-f", str(compose_file), "up", "-d", external=True)
     try:
         wait_for_kafka_stack_health(session, compose_file)
-        session.run("pytest", "tests/integration", "-m", "integration", *session.posargs)
+        session.run("pytest", "tests/integration/messaging", "-m", "integration", *session.posargs)
     finally:
         session.run("docker", "compose", "-f", str(compose_file), "down", "-v", "--remove-orphans", external=True)
+
+
+@nox.session(name="spark-integration", venv_backend="none")
+def spark_integration(session: Session) -> None:
+    compose_file = PROJECT_DIR / PROJECT_PACKAGE / "docker-compose.integration.yml"
+    if not compose_file.exists():
+        session.error(f"Integration compose file not found: {compose_file}")
+
+    session.run(
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "--profile",
+        "spark",
+        "run",
+        "--build",
+        "--rm",
+        "spark-smoke",
+        external=True,
+    )
 
 
 @nox.session(name="airflow-integration", venv_backend="none")

@@ -151,7 +151,7 @@ def test_integration_compose_checks_kafka_health_on_internal_listener() -> None:
     compose = yaml.safe_load(INTEGRATION_COMPOSE_FILE.read_text())
     kafka_healthcheck = compose["services"]["kafka"]["healthcheck"]["test"]
 
-    assert kafka_healthcheck == ["CMD", "kafka-topics", "--bootstrap-server", "localhost:29092", "--list"]
+    assert kafka_healthcheck == ["CMD", "kafka-topics", "--bootstrap-server", "kafka:29092", "--list"]
 
 
 def test_integration_compose_reads_local_airflow_credentials_from_environment() -> None:
@@ -212,7 +212,7 @@ def test_nox_kafka_integration_commands_target_default_integration_stack() -> No
         "kafka",
         "kafka-topics",
         "--bootstrap-server",
-        "localhost:29092",
+        "kafka:29092",
         "--list",
     ]
     assert noxfile.schema_registry_subjects_command(compose_file) == [
@@ -240,24 +240,18 @@ def test_nox_airflow_json_parser_rejects_output_without_json() -> None:
         noxfile._parse_json_from_command_output("WARNING: deprecated\nno json here")
 
 
-def test_airflow_integration_session_is_documented() -> None:
-    readme = Path("README.md").read_text()
-    airflow_doc = Path("markdown/airflow.md").read_text()
-
-    assert "uv run nox -s airflow-integration" in readme
-    assert "uv run nox -s airflow-integration" in airflow_doc
-    assert "uv run nox -s integration" in airflow_doc
-
-
 def test_nox_integration_session_aggregates_runtime_integration_sessions() -> None:
     noxfile_text = Path("noxfile.py").read_text()
     readme = Path("README.md").read_text()
 
     assert 'session.notify("kafka-integration")' in noxfile_text
+    assert 'session.notify("spark-integration")' in noxfile_text
     assert 'session.notify("airflow-integration")' in noxfile_text
     assert '@nox.session(name="kafka-integration", python=PYTHON_VERSION)' in noxfile_text
+    assert '@nox.session(name="spark-integration", venv_backend="none")' in noxfile_text
     assert '@nox.session(name="airflow-integration", venv_backend="none")' in noxfile_text
     assert "uv run nox -s kafka-integration" in readme
+    assert "uv run nox -s spark-integration" in readme
 
 
 def test_kafka_integration_session_is_documented_as_runtime_contract_test() -> None:

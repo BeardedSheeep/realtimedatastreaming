@@ -23,6 +23,7 @@ def register_configured_kafka_value_contracts() -> dict[str, int]:
         str(settings.schema_registry_url),
         schema_registry_config=schema_registry_config_from_settings(settings),
         users_created_topic=users_created_topic,
+        users_created_valid_topic=settings.kafka_users_created_valid_topic,
         users_created_invalid_topic=users_created_invalid_topic,
     )
 
