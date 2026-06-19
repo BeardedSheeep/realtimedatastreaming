@@ -19,6 +19,7 @@ from realtimedatastreaming.settings import Settings
 def test_airflow_registered_schema_contract_serializes_mocked_random_user_event(monkeypatch: Any) -> None:
     settings = Settings(
         KAFKA_USERS_CREATED_TOPIC="events.users.created",
+        KAFKA_USERS_CREATED_VALID_TOPIC="events.users.created.valid",
         KAFKA_USERS_CREATED_INVALID_TOPIC="events.users.created.invalid",
         SCHEMA_REGISTRY_URL="http://schema-registry:8081",
     )
@@ -40,6 +41,7 @@ def test_airflow_registered_schema_contract_serializes_mocked_random_user_event(
     assert registered_versions == {
         "events.users.created-value": 1,
         "events.users.created.invalid-value": 2,
+        "events.users.created.valid-value": 3,
     }
     assert schema_registry_client.lookup_subjects == ["events.users.created-value"]
     assert serialized_value.startswith(b"\x00")

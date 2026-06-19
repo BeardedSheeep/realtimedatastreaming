@@ -21,12 +21,14 @@ def test_register_configured_kafka_value_contracts_uses_settings_topics(monkeypa
         *,
         schema_registry_config: dict[str, str],
         users_created_topic: str,
+        users_created_valid_topic: str,
         users_created_invalid_topic: str,
     ) -> dict[str, int]:
         captured_call.update({
             "schema_registry_url": schema_registry_url,
             "schema_registry_config": schema_registry_config,
             "users_created_topic": users_created_topic,
+            "users_created_valid_topic": users_created_valid_topic,
             "users_created_invalid_topic": users_created_invalid_topic,
         })
         return {"events.users.created-value": 1}
@@ -45,6 +47,7 @@ def test_register_configured_kafka_value_contracts_uses_settings_topics(monkeypa
         "schema_registry_url": "http://schema-registry:8081/",
         "schema_registry_config": {"url": "http://schema-registry:8081/"},
         "users_created_topic": "events.users.created",
+        "users_created_valid_topic": "users_created_valid",
         "users_created_invalid_topic": "events.users.created.invalid",
     }
 
@@ -62,12 +65,14 @@ def test_register_configured_kafka_value_contracts_uses_schema_registry_auth_and
         *,
         schema_registry_config: dict[str, str],
         users_created_topic: str,
+        users_created_valid_topic: str,
         users_created_invalid_topic: str,
     ) -> dict[str, int]:
         captured_call.update({
             "schema_registry_url": schema_registry_url,
             "schema_registry_config": schema_registry_config,
             "users_created_topic": users_created_topic,
+            "users_created_valid_topic": users_created_valid_topic,
             "users_created_invalid_topic": users_created_invalid_topic,
         })
         return {"users_created-value": 1}
@@ -90,5 +95,6 @@ def test_register_configured_kafka_value_contracts_uses_schema_registry_auth_and
             "ssl.ca.location": "/etc/ssl/schema-registry-ca.pem",
         },
         "users_created_topic": "users_created",
+        "users_created_valid_topic": "users_created_valid",
         "users_created_invalid_topic": "users_created_invalid",
     }

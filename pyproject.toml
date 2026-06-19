@@ -30,6 +30,7 @@ dependencies = [
     "cachetools>=7.1.4,<8.0.0",
     "cassandra-driver>=3.29.0,<4.0.0",
     "confluent-kafka>=2.8.0,<3.0.0",
+    "cryptography>=48.0.1",
     "email-validator>=2.0.0,<3.0.0",
     "httpx>=0.28.0,<1.0.0",
     "jsonschema>=4.26.0",
@@ -46,10 +47,12 @@ Issues = "https://github.com/BeardedSheeep/realtimedatastreaming/issues"
 
 [project.scripts]
 realtimedatastreaming = "realtimedatastreaming.cli:main"
+realtimedatastreaming-spark = "realtimedatastreaming.streaming.spark_job:main"
 
 [dependency-groups]
 dev = [
     "nox[uv]>=2026.4.10",
+    "pip>=26.1.2",
     "pip-audit>=2.7.0",
     "pre-commit>=4.0.0",
 ]

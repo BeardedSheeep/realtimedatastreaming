@@ -19,6 +19,7 @@ def test_settings_defaults() -> None:
     assert settings.random_user_http_timeout_seconds == 10.0
     assert settings.kafka_bootstrap_servers == ("localhost:9092",)
     assert settings.kafka_users_created_topic == "users_created"
+    assert settings.kafka_users_created_valid_topic == "users_created_valid"
     assert settings.kafka_users_created_invalid_topic == "users_created_invalid"
     assert str(settings.schema_registry_url) == "http://localhost:8081/"
     assert settings.kafka_sasl_username is None
@@ -26,6 +27,7 @@ def test_settings_defaults() -> None:
     assert settings.spark_app_name == "realtimedatastreaming"
     assert settings.spark_master_url == "local[*]"
     assert settings.spark_checkpoint_location == "/tmp/realtimedatastreaming/checkpoints"
+    assert settings.spark_kafka_package == "org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.2"
     assert settings.cassandra_host == "localhost"
     assert settings.cassandra_port == 9042
     assert settings.cassandra_keyspace == "realtimedatastreaming"
@@ -53,6 +55,7 @@ def test_settings_read_environment_overrides(monkeypatch: Any) -> None:
     monkeypatch.setenv("RANDOM_USER_HTTP_TIMEOUT_SECONDS", "2.5")
     monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "kafka-a:9092, kafka-b:9092")
     monkeypatch.setenv("KAFKA_USERS_CREATED_TOPIC", "events.users.created")
+    monkeypatch.setenv("KAFKA_USERS_CREATED_VALID_TOPIC", "events.users.created.valid")
     monkeypatch.setenv("KAFKA_USERS_CREATED_INVALID_TOPIC", "events.users.created.invalid")
     monkeypatch.setenv("SCHEMA_REGISTRY_URL", "http://schema-registry:8081")
     monkeypatch.setenv("KAFKA_SASL_USERNAME", "kafka-user")
@@ -60,6 +63,7 @@ def test_settings_read_environment_overrides(monkeypatch: Any) -> None:
     monkeypatch.setenv("SPARK_APP_NAME", "custom-spark-app")
     monkeypatch.setenv("SPARK_MASTER_URL", "spark://spark-master:7077")
     monkeypatch.setenv("SPARK_CHECKPOINT_LOCATION", "file:///tmp/custom-checkpoints")
+    monkeypatch.setenv("SPARK_KAFKA_PACKAGE", "example:spark-kafka:1.0.0")
     monkeypatch.setenv("CASSANDRA_HOST", "cassandra")
     monkeypatch.setenv("CASSANDRA_PORT", "9142")
     monkeypatch.setenv("CASSANDRA_KEYSPACE", "custom_keyspace")
@@ -86,6 +90,7 @@ def test_settings_read_environment_overrides(monkeypatch: Any) -> None:
     assert settings.random_user_http_timeout_seconds == 2.5
     assert settings.kafka_bootstrap_servers == ("kafka-a:9092", "kafka-b:9092")
     assert settings.kafka_users_created_topic == "events.users.created"
+    assert settings.kafka_users_created_valid_topic == "events.users.created.valid"
     assert settings.kafka_users_created_invalid_topic == "events.users.created.invalid"
     assert str(settings.schema_registry_url) == "http://schema-registry:8081/"
     assert settings.kafka_sasl_username == "kafka-user"
@@ -94,6 +99,7 @@ def test_settings_read_environment_overrides(monkeypatch: Any) -> None:
     assert settings.spark_app_name == "custom-spark-app"
     assert settings.spark_master_url == "spark://spark-master:7077"
     assert settings.spark_checkpoint_location == "file:///tmp/custom-checkpoints"
+    assert settings.spark_kafka_package == "example:spark-kafka:1.0.0"
     assert settings.cassandra_host == "cassandra"
     assert settings.cassandra_port == 9142
     assert settings.cassandra_keyspace == "custom_keyspace"

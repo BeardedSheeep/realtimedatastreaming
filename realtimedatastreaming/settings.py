@@ -107,6 +107,11 @@ class KafkaSettings(BaseSettings):
         min_length=1,
         alias="KAFKA_USERS_CREATED_TOPIC",
     )
+    kafka_users_created_valid_topic: str = Field(
+        default="users_created_valid",
+        min_length=1,
+        alias="KAFKA_USERS_CREATED_VALID_TOPIC",
+    )
     kafka_users_created_invalid_topic: str = Field(
         default="users_created_invalid",
         min_length=1,
@@ -161,7 +166,11 @@ class KafkaSettings(BaseSettings):
             raise ValueError(msg)
         return value
 
-    @field_validator("kafka_users_created_topic", "kafka_users_created_invalid_topic")
+    @field_validator(
+        "kafka_users_created_topic",
+        "kafka_users_created_valid_topic",
+        "kafka_users_created_invalid_topic",
+    )
     @classmethod
     def validate_kafka_topic_name(cls, value: str) -> str:
         if value in {".", ".."} or not KAFKA_TOPIC_PATTERN.fullmatch(value) or len(value) > 249:
@@ -195,6 +204,11 @@ class SparkSettings(BaseSettings):
         default="/tmp/realtimedatastreaming/checkpoints",
         min_length=1,
         alias="SPARK_CHECKPOINT_LOCATION",
+    )
+    spark_kafka_package: str = Field(
+        default="org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.2",
+        min_length=1,
+        alias="SPARK_KAFKA_PACKAGE",
     )
 
     model_config = SettingsConfigDict(extra="ignore")
@@ -338,6 +352,10 @@ class Settings(BaseSettings):
         return self.kafka.kafka_users_created_topic
 
     @property
+    def kafka_users_created_valid_topic(self) -> str:
+        return self.kafka.kafka_users_created_valid_topic
+
+    @property
     def kafka_users_created_invalid_topic(self) -> str:
         return self.kafka.kafka_users_created_invalid_topic
 
@@ -372,6 +390,10 @@ class Settings(BaseSettings):
     @property
     def spark_checkpoint_location(self) -> str:
         return self.spark.spark_checkpoint_location
+
+    @property
+    def spark_kafka_package(self) -> str:
+        return self.spark.spark_kafka_package
 
     @property
     def cassandra_host(self) -> str:

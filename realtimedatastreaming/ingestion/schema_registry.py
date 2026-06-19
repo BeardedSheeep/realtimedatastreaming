@@ -71,6 +71,23 @@ def kafka_value_contracts_for_topics(
     )
 
 
+def kafka_streaming_value_contracts_for_topics(
+    *,
+    users_created_valid_topic: str,
+    users_created_invalid_topic: str,
+) -> tuple[KafkaJsonSchemaContract, KafkaJsonSchemaContract]:
+    return (
+        KafkaJsonSchemaContract(
+            subject=value_subject_for_topic(users_created_valid_topic),
+            schema_path=USERS_CREATED_VALUE_SCHEMA_PATH,
+        ),
+        KafkaJsonSchemaContract(
+            subject=value_subject_for_topic(users_created_invalid_topic),
+            schema_path=USERS_CREATED_INVALID_VALUE_SCHEMA_PATH,
+        ),
+    )
+
+
 class SchemaRegistryClientProtocol(Protocol):
     def set_compatibility(self, subject_name: str | None = None, level: str | None = None) -> str: ...
 
@@ -97,14 +114,24 @@ def register_kafka_value_contracts(
     schema_registry_config: dict[str, str] | None = None,
     schema_registry_client: SchemaRegistryClientProtocol | None = None,
     users_created_topic: str = "users_created",
+    users_created_valid_topic: str | None = None,
     users_created_invalid_topic: str = "users_created_invalid",
     contracts: tuple[KafkaJsonSchemaContract, ...] | None = None,
 ) -> dict[str, int]:
     client = schema_registry_client or SchemaRegistryClient(schema_registry_config or {"url": schema_registry_url})
-    value_contracts = contracts or kafka_value_contracts_for_topics(
-        users_created_topic=users_created_topic,
-        users_created_invalid_topic=users_created_invalid_topic,
-    )
+    if contracts is not None:
+        value_contracts = contracts
+    else:
+        value_contracts = kafka_value_contracts_for_topics(
+            users_created_topic=users_created_topic,
+            users_created_invalid_topic=users_created_invalid_topic,
+        )
+        if users_created_valid_topic is not None:
+            valid_contract, _ = kafka_streaming_value_contracts_for_topics(
+                users_created_valid_topic=users_created_valid_topic,
+                users_created_invalid_topic=users_created_invalid_topic,
+            )
+            value_contracts = (*value_contracts, valid_contract)
     return {
         contract.subject: _register_contract(contract=contract, schema_registry_client=client)
         for contract in value_contracts

@@ -57,3 +57,10 @@ def test_settings_reject_invalid_users_created_invalid_topic_name(monkeypatch: A
 
     with pytest.raises(ValidationError):
         Settings()
+
+
+def test_settings_reject_invalid_users_created_valid_topic_name(monkeypatch: Any) -> None:
+    monkeypatch.setenv("KAFKA_USERS_CREATED_VALID_TOPIC", "events/users/valid")
+
+    with pytest.raises(ValidationError):
+        Settings()
